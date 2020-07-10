@@ -229,8 +229,11 @@ public:
     qint64 toNumberPrevious() const;
     bool toBool() const;
     QVariant toVariant() const;
+    double toDouble() const;
+    double toDoublePrevious() const;
     bool setValue(const QString &val);
     bool setValue(qint64 val);
+    bool setDValue(double val);
     bool setValue(const QVariant &val);
     const ResourceItemDescriptor &descriptor() const;
     const QDateTime &lastSet() const;
@@ -246,7 +249,9 @@ private:
 
     bool m_isPublic = true;
     qint64 m_num = 0;
+    double m_dbl = 0.0;
     qint64 m_numPrev = 0;
+    double m_dblPrev = 0.0;
     QString *m_str = nullptr;
     ResourceItemDescriptor m_rid;
     QDateTime m_lastSet;

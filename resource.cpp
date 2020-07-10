@@ -214,7 +214,7 @@ void initResourceDescriptors()
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, RStateOrientationZ));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeBool, RStatePresence));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, RStatePressure, 0, 32767));
-    rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, RStatePower));
+    rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeReal, RStatePower));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeBool, RStateReachable));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeUInt8, RStateSat));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeString, RActionScene));
@@ -340,6 +340,8 @@ ResourceItem &ResourceItem::operator=(const ResourceItem &other)
 
     m_num = other.m_num;
     m_numPrev = other.m_numPrev;
+    m_dbl = other.m_dbl;
+    m_dblPrev = other.m_dblPrev;
     m_rid = other.m_rid;
     m_isPublic = other.m_isPublic;
     m_lastSet = other.lastSet();
@@ -359,7 +361,9 @@ ResourceItem &ResourceItem::operator=(const ResourceItem &other)
 
 ResourceItem::ResourceItem(const ResourceItemDescriptor &rid) :
     m_num(0),
+    m_dbl(0.0),
     m_numPrev(0),
+    m_dblPrev(0.0),
     m_str(nullptr),
     m_rid(rid)
 {
@@ -428,9 +432,19 @@ qint64 ResourceItem::toNumber() const
     return m_num;
 }
 
+double ResourceItem::toDouble() const
+{
+    return m_dbl;
+}
+
 qint64 ResourceItem::toNumberPrevious() const
 {
     return m_numPrev;
+}
+
+double ResourceItem::toDoublePrevious() const
+{
+    return m_dblPrev;
 }
 
 bool ResourceItem::toBool() const
@@ -471,6 +485,20 @@ bool ResourceItem::setValue(qint64 val)
     if (m_num != val)
     {
         m_num = val;
+        m_lastChanged = m_lastSet;
+    }
+
+    return true;
+}
+
+bool ResourceItem::setDValue(double val)
+{
+    m_lastSet = QDateTime::currentDateTime();
+    m_dblPrev = m_dbl;
+
+    if (m_dbl != val)
+    {
+        m_dbl = val;
         m_lastChanged = m_lastSet;
     }
 
@@ -620,6 +648,10 @@ QVariant ResourceItem::toVariant() const
     else if (m_rid.type == DataTypeTime)
     {
         return toString();
+    }
+    else if (m_rid.type == DataTypeReal)
+    {
+        return m_dbl;
     }
     else
     {

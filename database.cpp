@@ -725,6 +725,40 @@ void DeRestPluginPrivate::pushZclValueDb(quint64 extAddress, quint8 endpoint, qu
     dbQueryQueue.push_back(sql);
 }
 
+void DeRestPluginPrivate::pushZclValueDb2(quint64 extAddress, quint8 endpoint, quint16 clusterId, quint16 attributeId, double data)
+{
+    if (dbZclValueMaxAge <= 0)
+    {
+        return; // zcl value datastore disabled
+    }
+    qint64 now = QDateTime::currentMSecsSinceEpoch() / 1000;
+    QString sql = QString(QLatin1String(
+                              "INSERT INTO zcl_values (device_id,endpoint,cluster,attribute,data,timestamp) "
+                              "SELECT id, %2, %3, %4, %5, %6 "
+                              "FROM devices WHERE mac = '%1'"))
+            .arg(generateUniqueId(extAddress, 0, 0))
+            .arg(endpoint)
+            .arg(clusterId)
+            .arg(attributeId)
+            .arg(data, 0, 'f', 2)
+            .arg(now);
+
+    dbQueryQueue.push_back(sql);
+    queSaveDb(DB_QUERY_QUEUE, (dbQueryQueue.size() > 30) ? DB_SHORT_SAVE_DELAY : DB_LONG_SAVE_DELAY);
+
+    // add a cleanup command if not already queued
+    for (const QString &q : dbQueryQueue)
+    {
+        if (q.startsWith(QLatin1String("DELETE FROM zcl_values")))
+        {
+            return; // already queued
+        }
+    }
+
+    sql = QString(QLatin1String("DELETE FROM zcl_values WHERE timestamp < %1")).arg(now - dbZclValueMaxAge);
+    dbQueryQueue.push_back(sql);
+}
+
 /*! Opens/creates sqlite database.
  */
 void DeRestPluginPrivate::openDb()
@@ -3171,7 +3205,7 @@ static int sqliteLoadAllSensorsCallback(void *user, int ncols, char **colval , c
                     hasVoltage = false;
                 }
             }
-            item = sensor.addItem(DataTypeInt16, RStatePower);
+            item = sensor.addItem(DataTypeReal, RStatePower);
             item->setValue(0);
             if (hasVoltage)
             {

@@ -7301,12 +7301,19 @@ void DeRestPluginPrivate::updateSensorNode(const deCONZ::NodeEvent &event)
                                 {
                                     if (i->type() == QLatin1String("ZHAPower"))
                                     {
-                                        qint16 power = ia->numericValue().real;
+                                        //qint16 power = ia->numericValue().real;
+                                        double power = ia->numericValue().real;
+                                        power = round(power * 100) / 100.0;
+                                        DBG_Printf(DBG_INFO_L2, "[DBL] Double value: %f\n", power);
+                                        
+                                        pushZclValueDb2(event.node()->address().ext(), event.endpoint(), event.clusterId(), ia->id(), power);
+                                        
                                         ResourceItem *item = i->item(RStatePower);
 
                                         if (item)
                                         {
-                                            item->setValue(power); // in W
+                                            //item->setValue(power); // in W
+                                            item->setDValue(power); // in W
                                             i->updateStateTimestamp();
                                             i->setNeedSaveDatabase(true);
                                             enqueueEvent(Event(RSensors, RStatePower, i->id(), item));
