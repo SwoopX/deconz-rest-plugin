@@ -2076,8 +2076,26 @@ bool DeRestPluginPrivate::sendConfigureReportingRequest(BindingTask &bt)
         rq.minInterval = 1;
         rq.maxInterval = 300;
         rq.reportableChange8bit = 1;
-
-        return sendConfigureReportingRequest(bt, {rq});
+        
+        if (modelId == QLatin1String("Generic UP Device"))
+        {
+            rq2.dataType = deCONZ::Zcl8BitEnum;
+            rq2.attributeId = 0x0000; // Window covering type
+            rq2.minInterval = 1;
+            rq2.maxInterval = 300;
+            
+            rq3.dataType = deCONZ::Zcl8BitUint;
+            rq3.attributeId = 0x0009; // Current Position Tilt Percentage
+            rq3.minInterval = 1;
+            rq3.maxInterval = 300;
+            rq3.reportableChange8bit = 1;
+            
+            return sendConfigureReportingRequest(bt, {rq, rq2, rq3});
+        }
+        else
+        {
+            return sendConfigureReportingRequest(bt, {rq});
+        }
     }
     else if (bt.binding.clusterId == DOOR_LOCK_CLUSTER_ID)
     {
@@ -2556,6 +2574,9 @@ void DeRestPluginPrivate::checkLightBindingsForAttributeReporting(LightNode *lig
         {
         }
         else if (lightNode->manufacturer() == QLatin1String("NIKO NV"))
+        {
+        }
+        else if (lightNode->manufacturerCode() == VENDOR_INSTA)
         {
         }
         else if (lightNode->manufacturerCode() == VENDOR_AXIS || lightNode->manufacturerCode() == VENDOR_MMB) // Axis shade

@@ -75,8 +75,14 @@
 #include "de_web_plugin_private.h"
 #include "product_match.h"
 
+#define COVERING_ATTRID_TYPE                    0x0000
+#define COVERING_ATTRID_LIFT_PERCENTAGE         0x0008
+#define COVERING_ATTRID_TILT_PERCENTAGE         0x0009
+#define COVERING_ATTRID_OPERATIONAL_STATUS      0x000A // ubisys specific
+
 int calibrationStep = 0;
 int operationalStatus = 0;
+TaskItem calibrationTask;
 
 /*! Handle packets related to the ZCL Window Covering cluster.
     \param ind the APS level data indication containing the ZCL packet
@@ -84,10 +90,13 @@ int operationalStatus = 0;
  */
 void DeRestPluginPrivate::handleWindowCoveringClusterIndication(const deCONZ::ApsDataIndication &ind, deCONZ::ZclFrame &zclFrame)
 {
+    if (zclFrame.isDefaultResponse())
+    {
+        return;
+    }
+
     // FIXME: You're only handling ZclReadAttributesResponse and ZclReportAttributes - no other commands
     //        why not call this from deCONZ::NodeEvent instead that has already parsed the payload
-
-    Q_UNUSED(ind);
 
     LightNode *lightNode = getLightNodeForAddress(ind.srcAddress(), ind.srcEndpoint());
 
@@ -97,82 +106,130 @@ void DeRestPluginPrivate::handleWindowCoveringClusterIndication(const deCONZ::Ap
         return;
     }
 
-    deCONZ::NumericUnion numericValue{};
-    quint16 attrid = 0x0000;
-    quint8 attrTypeId = 0x00;
-    quint8 attrValue = 0x00;
-    quint8 status = 0x00;
-
     QDataStream stream(zclFrame.payload());
     stream.setByteOrder(QDataStream::LittleEndian);
 
-    NodeValue::UpdateType updateType = NodeValue::UpdateInvalid;
+    bool isReadAttr = false;
+    bool isReporting = false;
     if (zclFrame.isProfileWideCommand() && zclFrame.commandId() == deCONZ::ZclReadAttributesResponseId)
     {
-        updateType = NodeValue::UpdateByZclRead;
+        isReadAttr = true;
     }
-    else if (zclFrame.isProfileWideCommand() && zclFrame.commandId() == deCONZ::ZclReportAttributesId)
+    if (zclFrame.isProfileWideCommand() && zclFrame.commandId() == deCONZ::ZclReportAttributesId)
     {
-        updateType = NodeValue::UpdateByZclReport;
+        isReporting = true;
     }
-
-    const QString modelId = lightNode->modelId();
 
     // Read ZCL reporting and ZCL Read Attributes Response
-    if (updateType != NodeValue::UpdateInvalid)
+    if (isReadAttr || isReporting)
     {
+        const NodeValue::UpdateType updateType = isReadAttr ? NodeValue::UpdateByZclRead : NodeValue::UpdateByZclReport;
+
         while (!stream.atEnd())
         {
-            stream >> attrid;
-            if (updateType == NodeValue::UpdateByZclRead)
+            quint16 attrId;
+            quint8 attrTypeId;
+
+            stream >> attrId;
+            if (isReadAttr)
             {
+                quint8 status;
                 stream >> status;  // Read Attribute Response status
-                if (status != 0)
+                if (status != deCONZ::ZclSuccessStatus)
                 {
-                    return;
+                    continue;
                 }
             }
             stream >> attrTypeId;
-            switch (attrTypeId)
+
+            deCONZ::ZclAttribute attr(attrId, attrTypeId, QLatin1String(""), deCONZ::ZclRead, false);
+
+            if (!attr.readFromStream(stream))
             {
-                case deCONZ::Zcl8BitData:
-                case deCONZ::ZclBoolean:
-                case deCONZ::Zcl8BitBitMap:
-                case deCONZ::Zcl8BitUint:
-                case deCONZ::Zcl8BitInt:
-                case deCONZ::Zcl8BitEnum:
-                    stream >> attrValue;
-                    break;
-                case deCONZ::Zcl16BitData:
-                case deCONZ::Zcl16BitBitMap:
-                case deCONZ::Zcl16BitUint:
-                case deCONZ::Zcl16BitInt:
-                case deCONZ::Zcl16BitEnum:
-                    quint16 attrVal16;
-                    stream >> attrVal16;
-                    break;
-                default:
-                    // unsupported data type
-                    return;
+                continue;
             }
 
-            if (attrid == 0x0008) // current CurrentPositionLiftPercentage 0-100
+            switch (attrId)
             {
-                // Update value in the GUI.
-                numericValue.u8 = attrValue;
-                lightNode->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, attrid, numericValue);
+            case COVERING_ATTRID_TYPE:
+            {
+                lightNode->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, COVERING_ATTRID_TYPE, attr.numericValue());
 
-                quint8 lift = attrValue;
+                quint8 type = attr.numericValue().u8;
+
+                bool hasLift = true; // set default to lift
+                bool hasTilt = false;
+
+                if (type == 8) // Lift & tilt
+                {
+                    hasTilt = true;
+                }
+                else if (type == 6 || type == 7) // Tilt only
+                {
+                    hasTilt = true;
+                    hasLift = false;
+                }
+
+                if (hasLift && hasTilt)
+                {
+                    lightNode->addItem(DataTypeUInt8, RStateLift);
+                    lightNode->addItem(DataTypeUInt8, RStateBri); // FIXME: deprecate
+                    lightNode->addItem(DataTypeUInt8, RStateTilt);
+                    lightNode->addItem(DataTypeUInt8, RStateSat); // FIXME: deprecate
+                }
+                else if (hasLift)
+                {
+                    lightNode->addItem(DataTypeUInt8, RStateLift);
+                    lightNode->addItem(DataTypeUInt8, RStateBri); // FIXME: deprecate
+                    lightNode->removeItem(RStateTilt);
+                    lightNode->removeItem(RStateSat); // FIXME: deprecate
+                }
+                else if (hasTilt)
+                {
+                    lightNode->addItem(DataTypeUInt8, RStateTilt);
+                    lightNode->addItem(DataTypeUInt8, RStateSat); // FIXME: deprecate
+                    lightNode->removeItem(RStateLift);
+                    lightNode->removeItem(RStateBri); // FIXME: deprecate
+                }
+
+                Sensor *sensor = getSensorNodeForAddressAndEndpoint(ind.srcAddress(), 0x02);
+
+                if (sensor)
+                {
+                    ResourceItem *item = sensor->item(RConfigWindowCoveringType);
+
+                    if (item && item->toNumber() != type)
+                    {
+                        item->setValue(type);
+                        enqueueEvent(Event(RSensors, RConfigWindowCoveringType, sensor->id(), item));
+                        sensor->updateStateTimestamp();
+                        enqueueEvent(Event(RSensors, RStateLastUpdated, sensor->id()));
+                        updateSensorEtag(&*sensor);
+                        sensor->setNeedSaveDatabase(true);
+                        queSaveDb(DB_SENSORS, DB_SHORT_SAVE_DELAY);
+                    }
+                    sensor->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, COVERING_ATTRID_TYPE, attr.numericValue());
+                }
+
+            }
+                break;
+
+            case COVERING_ATTRID_LIFT_PERCENTAGE:
+            {
+                lightNode->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, COVERING_ATTRID_LIFT_PERCENTAGE, attr.numericValue());
+
+                quint8 lift = attr.numericValue().u8;
+
                 // Reverse value for somes curtains
-                if (modelId.startsWith(QLatin1String("lumi.curtain")) ||
-                    modelId == QLatin1String("D10110") ||
-                    modelId == QLatin1String("Motor Controller"))
+                if (lightNode->modelId().startsWith(QLatin1String("lumi.curtain")) ||
+                    lightNode->modelId() == QLatin1String("D10110") ||
+                    lightNode->modelId() == QLatin1String("Motor Controller"))
                 {
                     lift = 100 - lift;
                 }
                 // Reverse value for Legrand but only for old value
-                else if (modelId == QLatin1String("Shutter SW with level control") ||
-                         modelId == QLatin1String("Shutter switch with neutral"))
+                else if (lightNode->modelId() == QLatin1String("Shutter SW with level control") ||
+                         lightNode->modelId() == QLatin1String("Shutter switch with neutral"))
                 {
                     bool bStatus = false;
                     uint nHex = lightNode->swBuildId().toUInt(&bStatus,16);
@@ -191,10 +248,7 @@ void DeRestPluginPrivate::handleWindowCoveringClusterIndication(const deCONZ::Ap
 
                 bool open = lift < 100;
 
-                if (lightNode->setValue(RStateLift, lift))
-                {
-                    pushZclValueDb(lightNode->address().ext(), lightNode->haEndpoint().endpoint(), WINDOW_COVERING_CLUSTER_ID, attrid, attrValue);
-                }
+                lightNode->setValue(RStateLift, lift);
                 lightNode->setValue(RStateOpen, open);
 
                 // FIXME: deprecate
@@ -204,43 +258,33 @@ void DeRestPluginPrivate::handleWindowCoveringClusterIndication(const deCONZ::Ap
                 lightNode->setValue(RStateOn, on);
                 // END FIXME: deprecate
             }
-            else if (attrid == 0x0009) // current CurrentPositionTiltPercentage 0-100
-            {
-                numericValue.u8 = attrValue;
-                lightNode->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, attrid, numericValue);
+                break;
 
-                quint8 tilt = attrValue;
-                if (lightNode->setValue(RStateTilt, tilt))
-                {
-                    pushZclValueDb(lightNode->address().ext(), lightNode->haEndpoint().endpoint(), WINDOW_COVERING_CLUSTER_ID, attrid, attrValue);
-                }
+            case COVERING_ATTRID_TILT_PERCENTAGE:
+            {
+                lightNode->setZclValue(updateType, ind.srcEndpoint(), WINDOW_COVERING_CLUSTER_ID, COVERING_ATTRID_TILT_PERCENTAGE, attr.numericValue());
+
+                quint8 tilt = attr.numericValue().u8;
+                lightNode->setValue(RStateTilt, tilt);
 
                 // FIXME: deprecate
-                quint8 sat = attrValue * 254 / 100;
+                quint8 sat = tilt * 254 / 100;
                 lightNode->setValue(RStateSat, sat);
                 // END FIXME: deprecate
             }
-            else if (attrid == 0x000A)  // read attribute 0x000A OperationalStatus
+                break;
+
+            case COVERING_ATTRID_OPERATIONAL_STATUS:
             {
                 if (calibrationStep != 0 && ind.srcAddress().ext() == calibrationTask.req.dstAddress().ext())
                 {
-                    operationalStatus = attrValue;
+                    operationalStatus = attr.numericValue().u8;
                 }
             }
-            else if (attrid == 0x0000)  // read attribute 0x0000 WindowConveringType
-            {
-                Sensor *sensor = getSensorNodeForAddressAndEndpoint(ind.srcAddress(), 0x02);
-                if (sensor)
-                {
-                    ResourceItem *item = sensor->item(RConfigWindowCoveringType);
+                break;
 
-                    if (item)
-                    {
-                        item->setValue(attrValue);
-                        sensor->setNeedSaveDatabase(true);
-                        queSaveDb(DB_SENSORS, DB_SHORT_SAVE_DELAY);
-                    }
-                }
+            default:
+                break;
             }
         }
     }
