@@ -2080,11 +2080,13 @@ bool DeRestPluginPrivate::sendConfigureReportingRequest(BindingTask &bt)
         
         if (modelId == QLatin1String("Generic UP Device"))
         {
+            ConfigureReportingRequest rq2;
             rq2.dataType = deCONZ::Zcl8BitEnum;
             rq2.attributeId = 0x0000; // Window covering type
             rq2.minInterval = 1;
             rq2.maxInterval = 300;
             
+            ConfigureReportingRequest rq3;
             rq3.dataType = deCONZ::Zcl8BitUint;
             rq3.attributeId = 0x0009; // Current Position Tilt Percentage
             rq3.minInterval = 1;
