@@ -15,6 +15,7 @@
 #include "device_js/device_js.h"
 #include "ias_zone.h"
 #include "resource.h"
+#include "thermostat.h"
 #include "zcl/zcl.h"
 
 #define TIME_CLUSTER_ID     0x000A
@@ -1784,18 +1785,337 @@ bool writeZclAttribute(const Resource *r, const ResourceItem *item, deCONZ::ApsC
     return result;
 }
 
+
+
+
+
+
+
+
+/*! A generic function to send a manufacturer specific heat setpoint command to danfoss thermostats or derivatives (Hive, POPP).
+
+    { "fn": "danfoss:heatsetpoint", "ep": endpoint, "eval": expression }
+
+    - endpoint: (optional) the destination endpoint
+    - expression: to transform the item value
+
+    Example: "write": {"ep": 1, "eval": "Item.val", "fn": "danfoss:heatsetpoint"}
+    
+    ToDo: This function could be moved to state_change.cpp if the respective function would be directly extracted from DDF and assigned to the item on load
+ */
+bool danfossSetHeatSetpoint(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &writeParameters)
+{
+    Q_ASSERT(r);
+    Q_ASSERT(item);
+    Q_ASSERT(apsCtrl);
+
+    bool result = false;
+    const auto rParent = r->parentResource() ? r->parentResource() : r;
+    const auto *extAddr = rParent->item(RAttrExtAddress);
+    const auto *nwkAddr = rParent->item(RAttrNwkAddress);
+
+    if (!extAddr || !nwkAddr)
+    {
+        return result;
+    }
+
+    const auto map = writeParameters.toMap();
+
+    bool ok;
+    auto ep = variantToUint(map.value("ep"), UINT8_MAX, &ok);
+
+    if (ep == AutoEndpoint)
+    {
+        ep = resolveAutoEndpoint(r);
+
+        if (ep == AutoEndpoint)
+        {
+            return result;
+        }
+    }
+
+    if (!map.contains("eval"))
+    {
+        return result;
+    }
+
+    const auto expr = map.value("eval").toString();
+
+    if (expr.isEmpty())
+    {
+        return result;
+    }
+
+    deCONZ::ApsDataRequest req;
+    deCONZ::ZclFrame zclFrame;
+
+    req.setClusterId(THERMOSTAT_CLUSTER_ID);
+    req.setProfileId(HA_PROFILE_ID);
+    req.dstAddress().setNwk(nwkAddr->toNumber());
+    req.dstAddress().setExt(extAddr->toNumber());
+    req.setDstAddressMode(deCONZ::ApsNwkAddress);
+    req.setDstEndpoint(ep);
+    req.setSrcEndpoint(0x01);
+
+    zclFrame.payload().clear();
+    zclFrame.setSequenceNumber(zclNextSequenceNumber());
+    zclFrame.setCommandId(0x40);    // Setpoint command
+    zclFrame.setFrameControl(deCONZ::ZclFCClusterCommand |
+                             deCONZ::ZclFCManufacturerSpecific |
+                             deCONZ::ZclFCDirectionClientToServer |
+                             deCONZ::ZclFCDisableDefaultResponse);
+    zclFrame.setManufacturerCode(0x1246);
+
+    DeviceJs &engine = *DeviceJs::instance();
+    engine.reset();
+    engine.setResource(r);
+    engine.setItem(item);
+
+    if (engine.evaluate(expr) != JsEvalResult::Ok)
+    {
+        DBG_Printf(DBG_INFO, "failed to evaluate expression for %s/%s: %s, err: %s\n", qPrintable(r->item(RAttrUniqueId)->toString()), item->descriptor().suffix, qPrintable(expr), qPrintable(engine.errorString()));
+        return result;
+    }
+
+    const auto res = engine.result();
+    DBG_Printf(DBG_INFO, "expression: %s --> %s\n", qPrintable(expr), qPrintable(res.toString()));
+
+    QDataStream stream(&zclFrame.payload(), QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    stream << (qint8) 0x01;         // Large valve movement
+    stream << (qint16) res.toInt(); // HeatingSetpoint
+
+    { // ZCL frame
+        QDataStream stream(&req.asdu(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        zclFrame.writeToStream(stream);
+    }
+
+    result = apsCtrl->apsdeDataRequest(req) == deCONZ::Success;
+
+    return result;
+}
+
+/*! A specialized function to parse the on-device heating schedules for thermostats from get weekly schedule response command.
+    The item->parseParameters() is expected to be an object (given in the device description file).
+
+    {"fn": "zcl", "ep": endpoint, "cl": clusterId, "cmd": commandId, "mf": manufacturerCode, "eval": expression}
+
+    - endpoint: (optional) 255 means any endpoint, 0 means auto selected from the related resource, defaults to 0
+    - clusterId: string hex value
+    - cmd: get weekly schedule response
+    - manufacturerCode: (optional) string hex value, defaults to "0x0000" for non manufacturer specific commands
+
+    Example: { "parse": {"cl": "0x0201", "cmd": "0x00", "ep": 1, "fn": "therm:schedule", "mfc": "0x0000"} }
+ */
+bool parseThermostatSchedule(Resource *r, ResourceItem *item, const deCONZ::ApsDataIndication &ind, const deCONZ::ZclFrame &zclFrame, const QVariant &parseParameters)
+{
+    //DBG_Printf(DBG_DDF, "[SCHEDULE] - parseThermostatSchedule()\n");
+
+    bool result = false;
+
+    if (!item->parseFunction()) // init on first call
+    {
+        Q_ASSERT(!parseParameters.isNull());
+        if (parseParameters.isNull())
+        {
+            //DBG_Printf(DBG_DDF, "[SCHEDULE] - Parseparameters NULL\n");
+            return result;
+        }
+
+        ZCL_Param param = getZclParam(parseParameters.toMap());
+
+        Q_ASSERT(param.valid);
+        if (!param.valid)
+        {
+            //DBG_Printf(DBG_DDF, "[SCHEDULE] - Parseparameters invalid\n");
+            return result;
+        }
+
+        if (param.hasCommandId && param.commandId != zclFrame.commandId())
+        {
+            //DBG_Printf(DBG_DDF, "[SCHEDULE] - Wrong command ID\n");
+            return result;
+        }
+
+        if (param.endpoint == AutoEndpoint)
+        {
+            param.endpoint = resolveAutoEndpoint(r);
+
+            if (param.endpoint == AutoEndpoint)
+            {
+                //DBG_Printf(DBG_DDF, "[SCHEDULE] - Wrong endpoint1\n");
+                return result;
+            }
+        }
+
+        item->setParseFunction(parseThermostatSchedule);
+        item->setZclProperties(param);
+    }
+
+    const auto &zclParam = item->zclParam();
+
+    if (ind.clusterId() != zclParam.clusterId || zclFrame.commandId() != zclParam.commandId)
+    {
+        //DBG_Printf(DBG_DDF, "[SCHEDULE] - Wrong cluster ID\n");
+        return result;
+    }
+
+    if (zclParam.endpoint < BroadcastEndpoint && zclParam.endpoint != ind.srcEndpoint())
+    {
+        //DBG_Printf(DBG_DDF, "[SCHEDULE] - Wrong endpoint2\n");
+        return result;
+    }
+
+    if (zclFrame.payload().isEmpty())
+    {
+        return result;
+    }
+
+    QDataStream stream(zclFrame.payload());
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    // Read command parameters into serialised string.
+    QString transitions = QString("");
+    quint8 numberOfTransitions = 0;
+    quint8 dayOfWeek = 0;
+    quint8 mode = 0;
+
+    stream >> numberOfTransitions;
+    stream >> dayOfWeek;
+    stream >> mode;
+
+    for (quint8 i = 0; i < numberOfTransitions; i++)
+    {
+        quint16 transitionTime;
+        qint16 heatSetpoint;
+        qint16 coolSetpoint;
+
+        stream >> transitionTime;
+        if (mode & 0x01) // bit 0: heat setpoint
+        {
+            stream >> heatSetpoint;
+            transitions += QString("T%1:%2|%3")
+                .arg(transitionTime / 60, 2, 10, QChar('0'))
+                .arg(transitionTime % 60, 2, 10, QChar('0'))
+                .arg(heatSetpoint);
+        }
+        if (mode & 0x02) // bit 1: cold setpoint
+        {
+            stream >> coolSetpoint;
+            // ignored for now
+            break;
+        }
+    }
+    
+    if (stream.status() == QDataStream::ReadPastEnd)
+    {
+        return result;
+    }
+
+    //DBG_Printf(DBG_DDF, "[SCHEDULE] - WD: %u, NWD: %u, TR: %s\n", dayOfWeek, convertWeekdayBitmap(dayOfWeek), qPrintable(transitions));
+
+    const quint8 newWeekdays = convertWeekdayBitmap(dayOfWeek);
+    QString schedule = updateThermostatSchedule1(item, newWeekdays, transitions);
+
+    //DBG_Printf(DBG_DDF, "%s/%s schedule: %s\n", qPrintable(r->item(RAttrUniqueId)->toString()), item->descriptor().suffix, qPrintable(schedule));
+
+    // Hack to prevent infinite query loop: The full and final current state schedule on the device is subsequently constructed by all 7 expected
+    // responses. Therefore, the state change has no chance of succeeding since the target value is the complete schedule over all days. To stop an endless
+    // write and read, the state change is forced into a synced state after every response because the target value gets replaced with a schedule of all
+    // previous responses. This works for now, but probably deserves/requires a more elegant and robust approach.
+    StateChange change(StateChange::StateCallFunction, SC_SetThermostatSchedule, ind.srcEndpoint());
+    change.addTargetValue(RConfigSchedule, schedule);
+    r->addStateChange(change);
+
+    item->setValue(schedule, ResourceItem::SourceDevice);
+    item->setLastZclReport(deCONZ::steadyTimeRef().ref);
+
+    result = true;
+
+    return result;
+}
+
+/*! A specialized function to get the on-device heating schedules for thermostats via get weekly schedule command.
+
+    Example: { "read": {"fn": "therm:schedule"} }
+ */
+static DA_ReadResult readThermostatSchedule(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &readParameters)
+{
+    Q_UNUSED(item)
+    Q_UNUSED(readParameters);
+
+    DA_ReadResult result{};
+
+    auto *rParent = r->parentResource() ? r->parentResource() : r;
+    const auto *extAddr = rParent->item(RAttrExtAddress);
+    const auto *nwkAddr = rParent->item(RAttrNwkAddress);
+
+    if (!extAddr || !nwkAddr)
+    {
+        return result;
+    }
+
+    quint8 endpoint = resolveAutoEndpoint(r);
+
+    if (endpoint == AutoEndpoint)
+    {
+        return result;
+    }
+
+    deCONZ::ApsDataRequest req;
+    deCONZ::ZclFrame zclFrame;
+
+    req.setDstEndpoint(endpoint);
+    req.setTxOptions(deCONZ::ApsTxAcknowledgedTransmission);
+    req.setDstAddressMode(deCONZ::ApsNwkAddress);
+    req.dstAddress().setNwk(nwkAddr->toNumber());
+    req.dstAddress().setExt(extAddr->toNumber());
+    req.setClusterId(THERMOSTAT_CLUSTER_ID);
+    req.setProfileId(HA_PROFILE_ID);
+    req.setSrcEndpoint(1); // TODO
+
+    zclFrame.setSequenceNumber(zclNextSequenceNumber());
+    zclFrame.setCommandId(THERMOSTAT_CMD_GET_WEEKLY_SCHEDULE);
+
+    zclFrame.setFrameControl(deCONZ::ZclFCClusterCommand |
+                             deCONZ::ZclFCDirectionClientToServer |
+                             deCONZ::ZclFCDisableDefaultResponse);
+
+    // payload
+    QDataStream stream(&zclFrame.payload(), QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    stream << (quint8) 0x7F; // Request response for all days
+    stream << (quint8) 0x01; // Mode: heat
+
+    { // ZCL frame
+        QDataStream stream(&req.asdu(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        zclFrame.writeToStream(stream);
+    }
+
+    result.isEnqueued = apsCtrl->apsdeDataRequest(req) == deCONZ::Success;
+    result.apsReqId = req.id();
+    result.sequenceNumber = zclFrame.sequenceNumber();
+
+    return result;
+}
+
 ParseFunction_t DA_GetParseFunction(const QVariant &params)
 {
     ParseFunction_t result = nullptr;
 
-    const std::array<ParseFunction, 6> functions =
+    const std::array<ParseFunction, 7> functions =
     {
         ParseFunction(QLatin1String("zcl"), 1, parseZclAttribute),
         ParseFunction(QLatin1String("xiaomi:special"), 1, parseXiaomiSpecial),
         ParseFunction(QLatin1String("ias:zonestatus"), 1, parseIasZoneNotificationAndStatus),
         ParseFunction(QLatin1String("tuya"), 1, parseTuyaData),
         ParseFunction(QLatin1String("numtostr"), 1, parseNumericToString),
-        ParseFunction(QLatin1String("time"), 1, parseAndSyncTime)
+        ParseFunction(QLatin1String("time"), 1, parseAndSyncTime),
+        ParseFunction(QLatin1String("therm:schedule"), 1, parseThermostatSchedule)
     };
 
     QString fnName;
@@ -1831,10 +2151,11 @@ ReadFunction_t DA_GetReadFunction(const QVariant &params)
 {
     ReadFunction_t result = nullptr;
 
-    const std::array<ReadFunction, 2> functions =
+    const std::array<ReadFunction, 3> functions =
     {
         ReadFunction(QLatin1String("zcl"), 1, readZclAttribute),
-        ReadFunction(QLatin1String("tuya"), 1, readTuyaAllData)
+        ReadFunction(QLatin1String("tuya"), 1, readTuyaAllData),
+        ReadFunction(QLatin1String("therm:schedule"), 1, readThermostatSchedule)
     };
 
     QString fnName;
@@ -1870,10 +2191,11 @@ WriteFunction_t DA_GetWriteFunction(const QVariant &params)
 {
     WriteFunction_t result = nullptr;
 
-    const std::array<WriteFunction, 2> functions =
+    const std::array<WriteFunction, 3> functions =
     {
         WriteFunction(QLatin1String("zcl"), 1, writeZclAttribute),
-        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData)
+        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData),
+        WriteFunction(QLatin1String("danfoss:heatsetpoint"), 1, danfossSetHeatSetpoint)
     };
 
     QString fnName;

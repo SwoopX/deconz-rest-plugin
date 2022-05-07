@@ -31,6 +31,11 @@
 #define COOLING_AND_HEATING_4PIPES              0x04
 #define COOLING_AND_HEATING_4PIPES_WITH_REHEAT  0x05
 
+// Commands
+#define THERMOSTAT_CMD_SET_WEEKLY_SCHEDULE     0x01
+#define THERMOSTAT_CMD_GET_WEEKLY_SCHEDULE     0x02
+#define THERMOSTAT_CMD_GET_WEEKLY_SCHEDULE_RSP 0x00
+
 extern const std::array<KeyValMap, 6> RConfigModeLegrandValues;
 extern const std::array<KeyValMapTuyaSingle, 3> RConfigModeValuesTuya1;
 extern const std::array<KeyValMapTuyaSingle, 2> RConfigModeValuesTuya2;
@@ -45,5 +50,8 @@ extern const std::array<KeyValMap, 5> RConfigSwingModeValues;
 extern const std::array<KeyValMapInt, 6> RConfigControlSequenceValues;
 extern const std::array<KeyMap, 3> RConfigModeValuesEurotronic;
 extern const std::array<KeyValMap, 5> RStateWindowOpenValuesDanfoss;
+
+QString updateThermostatScheduleDdf(ResourceItem *item, quint8 newWeekdays, QString &transitions);
+quint8 convertWeekdayBitmap(const quint8 weekdayBitmap);
 
 #endif // THERMOSTAT_H

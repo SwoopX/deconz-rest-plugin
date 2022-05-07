@@ -1089,10 +1089,9 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                     else if (sensor->modelId() == QLatin1String("eTRV0100") || sensor->modelId() == QLatin1String("TRV001") ||
                              sensor->modelId() == QLatin1String("eT093WRO"))
                     {
-                        if (addTaskThermostatCmd(task, VENDOR_DANFOSS, 0x40, data.integer, 0))
-                        {
-                            updated = true;
-                        }
+                        change.addTargetValue(rid.suffix, data.integer);
+                        rsub->addStateChange(change);
+                        updated = true;
                     }
                     else if (R_GetProductId(sensor) == QLatin1String("Tuya_THD HY369 TRV") ||
                              R_GetProductId(sensor) == QLatin1String("Tuya_THD HY368 TRV") ||
@@ -2107,6 +2106,11 @@ int DeRestPluginPrivate::changeThermostatSchedule(const ApiRequest &req, ApiResp
     task.req.setSrcEndpoint(getSrcEndpoint(sensor, task.req));
     task.req.setDstAddressMode(deCONZ::ApsExtAddress);
 
+    Device *device = (sensor && sensor->parentResource()) ? static_cast<Device*>(sensor->parentResource()) : nullptr;
+    Resource *rsub = DEV_GetSubDevice(device, nullptr, sensor->uniqueId());
+    const bool devManaged = device && device->managed();
+    bool ok3 = false;
+
     if (R_GetProductId(sensor) == QLatin1String("Tuya_THD HY369 TRV") ||
         R_GetProductId(sensor) == QLatin1String("Tuya_THD HY368 TRV") ||
         R_GetProductId(sensor) == QLatin1String("Tuya_THD GS361A-H04 TRV") ||
@@ -2127,7 +2131,19 @@ int DeRestPluginPrivate::changeThermostatSchedule(const ApiRequest &req, ApiResp
     }
     else
     {
-        ok2 = addTaskThermostatSetWeeklySchedule(task, weekdays, transitions);
+        if (devManaged && rsub)
+        {
+            StateChange change(StateChange::StateCallFunction, SC_SetThermostatSchedule, task.req.dstEndpoint());
+            change.addTargetValue(RConfigSchedule, updateThermostatScheduleDdf(item, weekdays, transitions));
+            change.addParameter(QLatin1String("weekdays"), weekdays);
+            change.addParameter(QLatin1String("transitions"), transitions);
+            rsub->addStateChange(change);
+            ok2 = ok3 = true;
+        }
+        else
+        {
+            ok2 = addTaskThermostatSetWeeklySchedule(task, weekdays, transitions);
+        }
     }
 
     if (!ok2)
@@ -2152,9 +2168,11 @@ int DeRestPluginPrivate::changeThermostatSchedule(const ApiRequest &req, ApiResp
     }
     rsp.list.append(rspItem);
 
-    updateThermostatSchedule(sensor, weekdays, transitions);
-
-    processTasks();
+    if (!ok3)
+    {
+        updateThermostatSchedule(sensor, weekdays, transitions);
+        processTasks();
+    }
 
     return REQ_READY_SEND;
 }

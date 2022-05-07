@@ -11,6 +11,7 @@
 #include "device_descriptions.h"
 #include "resource.h"
 #include "state_change.h"
+#include "thermostat.h"
 
 #define ONOFF_CLUSTER_ID      0x0006
 #define ONOFF_COMMAND_OFF     0x00
@@ -341,6 +342,118 @@ int SC_SetOnOff(const Resource *r, const StateChange *stateChange, deCONZ::ApsCo
     zclFrame.writeToStream(stream);
 
     DBG_Printf(DBG_INFO, "SC_SetOnOff()\n");
+
+    return apsCtrl->apsdeDataRequest(req) == deCONZ::Success ? 0 : -2;
+}
+
+/*! Sends the set weekly schedule command to the thermostat cluster. It currently only considers heating schedules.
+
+    StateChange::parameters() -> "weekdays"         Bitmap of days to set the schedule for
+    StateChange::parameters() -> "transitions"      String of transitions for the respective days. Empty transition results in schedule deletion.
+
+    \returns 0 - if the command has been enqueued, or a negative number on failure.
+ */
+int SC_SetThermostatSchedule(const Resource *r, const StateChange *stateChange, deCONZ::ApsController *apsCtrl)
+{
+    Q_ASSERT(r);
+    Q_ASSERT(stateChange);
+    Q_ASSERT(apsCtrl);
+
+    DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule()\n");
+
+    const auto rParent = r->parentResource() ? r->parentResource() : r;
+    const auto *extAddr = rParent->item(RAttrExtAddress);
+    const auto *nwkAddr = rParent->item(RAttrNwkAddress);
+
+    QString transitions;
+    quint8 weekdays = 0xff;
+
+    if (!extAddr || !nwkAddr)
+    {
+        //DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule() 1\n");
+        return -1;
+    }
+
+    for (const auto &i : stateChange->parameters())
+    {
+        if (i.name == QLatin1String("weekdays"))
+        {
+            bool ok;
+            auto val =  i.value.toUInt(&ok);
+
+            if (ok)
+            {
+                weekdays = val;
+                //DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule(), wd: %u\n", weekdays);
+            }
+        }
+
+        if (i.name == QLatin1String("transitions"))
+        {
+            auto transitions = i.value.toString();
+            //DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule(), trans: %s\n", qPrintable(transitions));
+        }
+    }
+
+    if (weekdays == 0xff)
+    {
+        //DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule() 2\n");
+        return -1;
+    }
+
+    deCONZ::ApsDataRequest req;
+    deCONZ::ZclFrame zclFrame;
+
+    req.setDstEndpoint(stateChange->dstEndpoint());
+    req.setTxOptions(deCONZ::ApsTxAcknowledgedTransmission);
+    req.setDstAddressMode(deCONZ::ApsExtAddress);
+    req.dstAddress().setNwk(nwkAddr->toNumber());
+    req.dstAddress().setExt(extAddr->toNumber());
+    req.setClusterId(THERMOSTAT_CLUSTER_ID);
+    req.setProfileId(HA_PROFILE_ID);
+    req.setSrcEndpoint(1); // TODO
+
+    zclFrame.setSequenceNumber(zclNextSequenceNumber());
+    zclFrame.setCommandId(THERMOSTAT_CMD_SET_WEEKLY_SCHEDULE);
+
+    zclFrame.setFrameControl(deCONZ::ZclFCClusterCommand |
+                             deCONZ::ZclFCDirectionClientToServer);
+
+    QStringList list = transitions.split("T", QString::SkipEmptyParts);
+    quint8 numberOfTransitions = list.size();
+
+    // payload
+    QDataStream stream(&zclFrame.payload(), QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    stream << numberOfTransitions;
+    stream << convertWeekdayBitmap(weekdays);
+    stream << (quint8) 0x01; // Mode: heat
+
+    for (const QString &entry : list)
+    {
+        QStringList attributes = entry.split("|");
+        if (attributes.size() != 2)
+        {
+            return -1;
+        }
+        const quint16 hh = attributes.at(0).mid(0, 2).toUInt();
+        const quint16 mm = attributes.at(0).mid(3, 2).toUInt();
+        const quint16 time = 60 * hh + mm;
+        const qint16 heatSetpoint = attributes.at(1).toInt();
+        stream << time;
+        stream << heatSetpoint;
+    }
+
+    { // ZCL frame
+        QDataStream stream(&req.asdu(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        zclFrame.writeToStream(stream);
+    }
+
+    //result = apsCtrl->apsdeDataRequest(req) == deCONZ::Success;
+
+    //DBG_Printf(DBG_INFO, "SC_SetThermostatSchedule()\n");
 
     return apsCtrl->apsdeDataRequest(req) == deCONZ::Success ? 0 : -2;
 }

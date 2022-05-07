@@ -130,7 +130,7 @@ const std::array<KeyValMap, 5> RStateWindowOpenValuesDanfoss = { { {QLatin1Strin
 
 /*! Covert Zigbee weekdays bitmap to ISO or v.v.
  */
-static quint8 convertWeekdayBitmap(const quint8 weekdayBitmap)
+quint8 convertWeekdayBitmap(const quint8 weekdayBitmap)
 {
     quint8 result = 0;
     if (weekdayBitmap & 0b00000001) { result |= 0b00000001; }
@@ -1456,4 +1456,66 @@ bool DeRestPluginPrivate::addTaskControlModeCmd(TaskItem &task, uint8_t cmdId, i
     }
 
     return addTask(task);
+}
+
+/*! Update thermostat schedule with new transitions
+ * \param item the resource item holding the current schedule
+ * \param newWeekdays the ISO bitmap of the weekdays
+ * \param transitions the serialised list of transitions
+ */
+QString updateThermostatScheduleDdf(ResourceItem *item, quint8 newWeekdays, QString &transitions)
+{
+    // Deserialise currently saved schedule, without newWeekdays.
+    bool ok = true;
+    QMap<quint8, QString> map;
+    QStringList list = item->toString().split("W", QString::SkipEmptyParts);
+    for (const QString &entry : list)
+    {
+        QStringList attributes = entry.split("/");
+        quint8 weekdays = attributes.at(0).toUInt(&ok);
+        if (!ok)
+        {
+            break;
+        }
+        weekdays &= ~newWeekdays;
+        if (weekdays != 0)
+        {
+            map[weekdays] = attributes.at(1);
+        }
+    }
+    if (!ok)
+    {
+        map.clear();
+    }
+
+    // Check if we already have an entry with these transitions.
+    if (transitions.size() > 0)
+    {
+        ok = false;
+        for (const quint8 weekdays : map.keys())
+        {
+            if (map[weekdays] == transitions)
+            {
+                // Merge the entries.
+                map.remove(weekdays);
+                map[weekdays | newWeekdays] = transitions;
+                ok = true;
+                break;
+            }
+        }
+        if (!ok)
+        {
+            // Create new entry.
+            map[newWeekdays] = transitions;
+        }
+    }
+
+    // Store the updated schedule.
+    QString s = QString("");
+    for (const quint8 weekdays : map.keys())
+    {
+        s += QString("W%1/").arg(weekdays) + map[weekdays];
+    }
+
+    return s;
 }
