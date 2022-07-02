@@ -1,0 +1,9 @@
+{
+        "schema": "resourceitem1.schema.json",
+        "id": "state/presencearea",
+        "datatype": "UInt8",
+        "access": "R",
+        "public": true,
+        "description": "Detection area.",
+        "default": 0
+}

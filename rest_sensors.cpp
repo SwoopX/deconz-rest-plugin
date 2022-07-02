@@ -1826,6 +1826,17 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                         }
                     }
                 }
+                else if (rid.suffix == RConfigDetectionArea) // String
+                {
+                    if (devManaged && rsub)
+                    {
+                        StateChange change1(StateChange::StateCallFunction, SC_SetDetectionArea, task.req.dstEndpoint());
+                        change1.addTargetValue(rid.suffix, data.string);
+                        change1.addParameter(QLatin1String("area"), data.string);
+                        rsub->addStateChange(change1);
+                        updated = true;
+                    }
+                }
                 else if (rid.suffix == RConfigFanMode) // String
                 {
                     const auto match = matchKeyValue(data.string, RConfigFanModeValues);

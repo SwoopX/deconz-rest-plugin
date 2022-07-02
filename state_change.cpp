@@ -344,3 +344,82 @@ int SC_SetOnOff(const Resource *r, const StateChange *stateChange, deCONZ::ApsCo
 
     return apsCtrl->apsdeDataRequest(req) == deCONZ::Success ? 0 : -2;
 }
+
+int SC_SetDetectionArea(const Resource *r, const StateChange *stateChange, deCONZ::ApsController *apsCtrl)
+{
+    DBG_Printf(DBG_INFO, "SC_SetDetectionArea()\n");
+    //DBG_Printf(DBG_INFO, "'%s' called\n", __FUNCTION__);
+
+    Q_UNUSED(stateChange);
+    Q_ASSERT(r);
+    Q_ASSERT(apsCtrl);
+
+    const auto rParent = r->parentResource() ? r->parentResource() : r;
+    const auto *extAddr = rParent->item(RAttrExtAddress);
+    const auto *nwkAddr = rParent->item(RAttrNwkAddress);
+
+    if (!extAddr || !nwkAddr)
+    {
+        DBG_Printf(DBG_INFO, "SC_SetDetectionArea() 1\n");
+        return -4;
+    }
+
+    QByteArray area;
+
+    for (const auto &i : stateChange->parameters())
+    {
+        if (i.name == QLatin1String("area"))
+        {
+            if (!i.value.toString().isEmpty())
+            {
+                area = QByteArray::fromHex(i.value.toString().toLatin1());
+            }
+            else
+            {
+                return -4;
+            }
+        }
+    }
+
+    deCONZ::ApsDataRequest req;
+    deCONZ::ZclFrame zclFrame;
+
+    req.setDstEndpoint(stateChange->dstEndpoint());
+    req.setTxOptions(deCONZ::ApsTxAcknowledgedTransmission);
+    req.setDstAddressMode(deCONZ::ApsNwkAddress);
+    req.dstAddress().setNwk(nwkAddr->toNumber());
+    req.dstAddress().setExt(extAddr->toNumber());
+    req.setClusterId(0xFCC0);
+    req.setProfileId(HA_PROFILE_ID);
+    req.setSrcEndpoint(1); // TODO
+
+    zclFrame.setSequenceNumber(zclNextSequenceNumber());
+    zclFrame.setCommandId(deCONZ::ZclWriteAttributesId);
+
+    zclFrame.setFrameControl(deCONZ::ZclFCProfileCommand |
+                             deCONZ::ZclFCManufacturerSpecific |
+                             deCONZ::ZclFCDirectionClientToServer |
+                             deCONZ::ZclFCDisableDefaultResponse);
+
+    zclFrame.setManufacturerCode(0x115f);
+
+    // payload
+    QDataStream stream(&zclFrame.payload(), QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::LittleEndian);
+
+    stream << static_cast<quint16>(0x0150);
+    stream << static_cast<quint8>(0x41);
+    stream << static_cast<quint8>(area.length());
+    for (int i = 0; i < area.length(); i++)
+    {
+        stream << static_cast<quint8>(area[i]);
+    }
+
+    { // ZCL frame
+        QDataStream stream(&req.asdu(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        zclFrame.writeToStream(stream);
+    }
+
+    return apsCtrl->apsdeDataRequest(req) == deCONZ::Success ? 0 : -2;
+}

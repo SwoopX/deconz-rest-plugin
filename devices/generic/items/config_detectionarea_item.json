@@ -1,0 +1,8 @@
+{
+        "schema": "resourceitem1.schema.json",
+        "id": "config/detectionarea",
+        "datatype": "String",
+        "access": "RW",
+        "public": true,
+        "description": "Set the detection are of the Aqara FP1."
+}

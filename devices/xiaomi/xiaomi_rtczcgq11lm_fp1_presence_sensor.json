@@ -89,6 +89,18 @@
           "default": "far"
         },
         {
+          "name": "config/detectionarea",
+          "write": {
+            "at": "0x0150",
+            "cl": "0xfcc0",
+            "dt": "0x41",
+            "ep": 1,
+            "eval": "Item.val",
+            "fn": "zcl"
+          },
+          "default": "test"
+        },
+        {
           "name": "config/devicemode",
           "refresh.interval": 360,
           "parse": {
@@ -188,6 +200,18 @@
             "eval": "(Attr.val != 1 && Attr.val != 3 && Attr.val != 5) ? Item.val = true : Item.val = false",
             "fn": "zcl"
           }
+        },
+        {
+          "name": "state/presenceareaevent",
+          "parse": {
+            "at": "0x0151",
+            "cl": "0xfcc0",
+            "ep": 1,
+            "eval": "Item.val = Number('' + Attr.val.charCodeAt(0) + Attr.val.charCodeAt(1))",
+            "fn": "zcl",
+            "mfc": "0x115f"
+          },
+          "default": 0
         },
         {
           "name": "state/presenceevent",
