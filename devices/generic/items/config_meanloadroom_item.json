@@ -1,0 +1,9 @@
+{
+  "schema": "resourceitem1.schema.json",
+  "id": "config/meanloadroom",
+  "datatype": "Int16",
+  "access": "RW",
+  "public": true,
+  "description": "The currently estimated load of the radiator.",
+  "default": -8000
+}

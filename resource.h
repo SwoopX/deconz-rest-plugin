@@ -246,6 +246,11 @@ extern const char *RCapOnOffWithEffect;
 extern const char *RCapSleeper;
 extern const char *RCapTransitionBlock;
 
+extern const char *RStateAdaptationStatus;
+extern const char *RStateLoadEstimate;
+extern const char *RConfigAdaptationRun;
+extern const char *RConfigAdaptationSetting;
+extern const char *RConfigMeanLoadRoom;
 extern const char *RConfigAlarmSystemId;
 extern const char *RConfigAlert;
 extern const char *RConfigAllowTouchlink;

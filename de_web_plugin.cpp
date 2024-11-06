@@ -1317,7 +1317,10 @@ void DeRestPluginPrivate::apsdeDataIndication(const deCONZ::ApsDataIndication &i
             break;
 
         case THERMOSTAT_CLUSTER_ID:
-            if (!DEV_TestStrict()) { handleThermostatClusterIndication(ind, zclFrame); }
+            if (!DEV_TestStrict() && (!devManaged || (devManaged && (zclFrame.frameControl() & 0x09) == (deCONZ::ZclFCDirectionServerToClient | deCONZ::ZclFCClusterCommand))))
+            {
+                handleThermostatClusterIndication(ind, zclFrame);
+            }
             break;
 
         case BASIC_CLUSTER_ID:

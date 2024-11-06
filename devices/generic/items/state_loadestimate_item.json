@@ -1,0 +1,9 @@
+{
+  "schema": "resourceitem1.schema.json",
+  "id": "state/loadestimate",
+  "datatype": "Int16",
+  "access": "R",
+  "public": true,
+  "description": "The currently estimated load of the radiator.",
+  "default": -8000
+}
