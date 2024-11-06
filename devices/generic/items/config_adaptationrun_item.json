@@ -1,0 +1,8 @@
+{
+  "schema": "resourceitem1.schema.json",
+  "id": "config/adaptationrun",
+  "datatype": "String",
+  "access": "RW",
+  "public": true,
+  "description": "The eTRV needs to estimate the Valve characteristic in order to work at full performance. In order to do this, the eTRV runs an 'Adaptation Run'."
+}
