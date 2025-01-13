@@ -2702,6 +2702,7 @@ bool DeRestPluginPrivate::sensorToMap(const Sensor *sensor, QVariantMap &map, co
     QVariantList xy;
     QVariantMap cap;
     QVariantMap measuredValue;
+    QVariantMap otau;
     QVariantMap config;
     const ResourceItem *ilcs = nullptr;
     const ResourceItem *ilca = nullptr;
@@ -2818,6 +2819,10 @@ bool DeRestPluginPrivate::sensorToMap(const Sensor *sensor, QVariantMap &map, co
             if (strncmp(key, "measured_value/", 15) == 0)
             {
                 measuredValue[key + 15] = item->toVariant();
+            }
+            else if (strncmp(key, "otau/", 5) == 0)
+            {
+                otau[key + 5] = item->toVariant();
             }
             else
             {
@@ -2942,6 +2947,7 @@ bool DeRestPluginPrivate::sensorToMap(const Sensor *sensor, QVariantMap &map, co
     map[QLatin1String("state")] = state;
     map[QLatin1String("config")] = config;
     if (!measuredValue.isEmpty()) cap[QLatin1String("measured_value")] = measuredValue;
+    if (!otau.isEmpty()) cap[QLatin1String("otau")] = otau;
     if (!cap.isEmpty()) map[QLatin1String("capabilities")] = cap;
 
     return true;
@@ -3223,6 +3229,7 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
 
             QVariantMap cap;
             QVariantMap measuredValue;
+            QVariantMap otau;
 
             for (int i = 0; i < sensor->itemCount(); i++)
             {
@@ -3239,6 +3246,10 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
                         {
                             measuredValue[key + 15] = item->toVariant();
                         }
+                        else if (strncmp(key, "otau/", 5) == 0)
+                        {
+                            otau[key + 5] = item->toVariant();
+                        }
                         else
                         {
                             cap[key] = item->toVariant();
@@ -3251,6 +3262,10 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
             if (!measuredValue.isEmpty())
             {
                 cap[QLatin1String("measured_value")] = measuredValue;
+            }
+            if (!otau.isEmpty())
+            {
+                cap[QLatin1String("otau")] = otau;
             }
             if (!cap.isEmpty())
             {
@@ -3280,6 +3295,7 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
             map[QLatin1String("uniqueid")] = sensor->uniqueId();
 
             QVariantMap attr;
+            QVariantMap attrOtau;
 
             for (int i = 0; i < sensor->itemCount(); i++)
             {
@@ -3298,6 +3314,10 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
                 }
             }
 
+            if (!attrOtau.isEmpty())
+            {
+                attr["otau"] = attrOtau;
+            }
             if (!attr.isEmpty())
             {
                 map["attr"] = attr;

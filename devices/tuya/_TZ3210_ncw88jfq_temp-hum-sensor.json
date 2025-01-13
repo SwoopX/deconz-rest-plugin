@@ -37,8 +37,19 @@
         },
         {
           "name": "attr/swversion",
-          "parse": {"fn": "zcl:attr", "ep": 1, "cl": "0x0000", "at": "0x0001", "script": "tuya_swversion.js"},
-          "read": {"fn": "zcl:attr", "ep": 1, "cl": "0x0000", "at": "0x0001"}
+          "parse": {
+            "fn": "zcl:attr",
+            "ep": 1,
+            "cl": "0x0000",
+            "at": "0x0001",
+            "script": "tuya_swversion.js"
+          },
+          "read": {
+            "fn": "zcl:attr",
+            "ep": 1,
+            "cl": "0x0000",
+            "at": "0x0001"
+          }
         },
         {
           "name": "attr/type"
@@ -47,21 +58,21 @@
           "name": "attr/uniqueid"
         },
         {
-            "name":"config/battery",
-            "refresh.interval": 86400,
-            "read":{
-                "at":"0x0021",
-                "cl":"0x0001",
-                "ep":1,
-                "fn":"zcl:attr"
-            },
-            "parse":{
-                "at":"0x0021",
-                "cl":"0x0001",
-                "ep":1,
-                "eval":"Item.val = Attr.val/2"
-            },
-            "default":0
+          "name": "config/battery",
+          "refresh.interval": 86400,
+          "read": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "eval": "Item.val = Attr.val/2"
+          },
+          "default": 0
         },
         {
           "name": "config/offset",
@@ -115,8 +126,19 @@
         },
         {
           "name": "attr/swversion",
-          "parse": {"fn": "zcl:attr", "ep": 1, "cl": "0x0000", "at": "0x0001", "script": "tuya_swversion.js"},
-          "read": {"fn": "zcl:attr", "ep": 1, "cl": "0x0000", "at": "0x0001"}
+          "parse": {
+            "fn": "zcl:attr",
+            "ep": 1,
+            "cl": "0x0000",
+            "at": "0x0001",
+            "script": "tuya_swversion.js"
+          },
+          "read": {
+            "fn": "zcl:attr",
+            "ep": 1,
+            "cl": "0x0000",
+            "at": "0x0001"
+          }
         },
         {
           "name": "attr/type"
@@ -125,21 +147,21 @@
           "name": "attr/uniqueid"
         },
         {
-            "name":"config/battery",
-            "refresh.interval": 86400,
-            "read":{
-                "at":"0x0021",
-                "cl":"0x0001",
-                "ep":1,
-                "fn":"zcl:attr"
-            },
-            "parse":{
-                "at":"0x0021",
-                "cl":"0x0001",
-                "ep":1,
-                "eval":"Item.val = Attr.val/2"
-            },
-            "default":0
+          "name": "config/battery",
+          "refresh.interval": 86400,
+          "read": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "eval": "Item.val = Attr.val/2"
+          },
+          "default": 0
         },
         {
           "name": "config/offset",

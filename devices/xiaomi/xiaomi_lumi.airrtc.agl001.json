@@ -28,7 +28,10 @@
       },
       "meta": {
         "values": {
-          "config/mode": {"off": 0, "heat": 1}
+          "config/mode": {
+            "off": 0,
+            "heat": 1
+          }
         }
       },
       "items": [
@@ -113,13 +116,13 @@
             "mf": "0x115f"
           },
           "write": {
-             "at": "0x0277",
-             "cl": "0xfcc0",
-             "dt": "0x20",
-             "ep": 1,
-             "eval": "if (Item.val == true) { 1 } else { 0 }",
-             "fn": "zcl:attr",
-             "mf": "0x115f"
+            "at": "0x0277",
+            "cl": "0xfcc0",
+            "dt": "0x20",
+            "ep": 1,
+            "eval": "if (Item.val == true) { 1 } else { 0 }",
+            "fn": "zcl:attr",
+            "mf": "0x115f"
           },
           "default": false
         },
@@ -148,13 +151,13 @@
             "mf": "0x115f"
           },
           "write": {
-             "at": "0x0271",
-             "cl": "0xfcc0",
-             "dt": "0x20",
-             "ep": 1,
-             "eval": "if (Item.val == 'off') { 0 } else if (Item.val == 'heat') { 1 }",
-             "fn": "zcl:attr",
-             "mf": "0x115f"
+            "at": "0x0271",
+            "cl": "0xfcc0",
+            "dt": "0x20",
+            "ep": 1,
+            "eval": "if (Item.val == 'off') { 0 } else if (Item.val == 'heat') { 1 }",
+            "fn": "zcl:attr",
+            "mf": "0x115f"
           }
         },
         {
@@ -175,13 +178,13 @@
             "mf": "0x115f"
           },
           "write": {
-             "at": "0x0272",
-             "cl": "0xfcc0",
-             "dt": "0x20",
-             "ep": 1,
-             "eval": "if (Item.val == 'manual') { 0 } else if (Item.val == 'auto') { 1 } else if (Item.val == 'holiday') { 2 }",
-             "fn": "zcl:attr",
-             "mf": "0x115f"
+            "at": "0x0272",
+            "cl": "0xfcc0",
+            "dt": "0x20",
+            "ep": 1,
+            "eval": "if (Item.val == 'manual') { 0 } else if (Item.val == 'auto') { 1 } else if (Item.val == 'holiday') { 2 }",
+            "fn": "zcl:attr",
+            "mf": "0x115f"
           }
         },
         {
