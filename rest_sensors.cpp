@@ -2834,6 +2834,7 @@ bool DeRestPluginPrivate::sensorToMap(const Sensor *sensor, QVariantMap &map, co
         else if (rid.suffix == RAttrProductId) { map["productid"] = item->toString(); }
         else if (rid.suffix == RAttrProductName) { map["productname"] = item->toString(); }
         else if (rid.suffix == RAttrZoneType) { map["zonetype"] = item->toNumber(); }
+        else if (rid.suffix == RAttrNwkAddress) { map["nwkaddress"] = item->toString(); }
     }
     if (iox && ioy && ioz)
     {
