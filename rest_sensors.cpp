@@ -2685,7 +2685,7 @@ int DeRestPluginPrivate::getNewSensors(const ApiRequest &req, ApiResponse &rsp)
     \return true - on success
             false - on error
  */
-bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const ApiRequest &re, bool event)
+bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const ApiRequest &re, const char *event)
 {
     if (!sensor)
     {
@@ -2711,6 +2711,12 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
                 continue;
             }
             const ResourceItemDescriptor &rid = item->descriptor();
+
+            // filter for same object parent: attr, state, config ..
+            if (event && (event[0] != rid.suffix[0] || event[1] != rid.suffix[1]))
+            {
+                continue;
+            }
 
             const ApiAttribute a = rid.toApi(map, event);
             QVariantMap *p = a.map;
@@ -2740,6 +2746,12 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
             continue;
         }
         const ResourceItemDescriptor &rid = item->descriptor();
+
+        // filter for same object parent: attr, state, config ..
+        if (event && (event[0] != rid.suffix[0] || event[1] != rid.suffix[1]))
+        {
+            continue;
+        }
 
         if (rid.suffix == RConfigReachable && sensor->type().startsWith(QLatin1String("ZGP")))
         {
@@ -3050,7 +3062,7 @@ void DeRestPluginPrivate::handleSensorEvent(const Event &e)
     QStringList path;  // dummy
     ApiRequest req(hdr, path, nullptr, QLatin1String("")); // dummy
     req.mode = ApiModeNormal;
-    sensorToMap(sensor, smap, req, true);
+    sensorToMap(sensor, smap, req, e.what());
 
     bool pushed = false;
     QVariantMap needPush = smap[QLatin1String("_push")].toMap();
