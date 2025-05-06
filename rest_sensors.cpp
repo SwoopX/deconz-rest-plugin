@@ -2710,6 +2710,12 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
             {
                 continue;
             }
+
+            if (!item->lastSet().isValid())
+            {
+                continue;
+            }
+
             const ResourceItemDescriptor &rid = item->descriptor();
 
             // filter for same object parent: attr, state, config ..
@@ -2718,9 +2724,15 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
                 continue;
             }
 
+            // following are only exposed on /devices
+            if (rid.suffix == RAttrDdfHash || rid.suffix == RAttrDdfPolicy)
+            {
+                continue;
+            }
+
             const ApiAttribute a = rid.toApi(map, event);
             QVariantMap *p = a.map;
-            (*p)[a.key] = item->toVariant();
+            (*p)[a.key] = R_ItemToRestApiVariant(item);
 
             if (event && item->needPushChange())
             {
@@ -2773,6 +2785,16 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
             if (!(all || item->needPushChange()))
             {
                 continue;
+            }
+
+            // quirk to ensure attr/lastseen and attr/lastannounced aren't null
+            if (rid.suffix == RAttrLastAnnounced || rid.suffix == RAttrLastSeen)
+            {
+                if (device && item->toNumber() <= 0 && 0 < device->creationTime())
+                {
+                    item->setValue(device->creationTime(), ResourceItem::SourceDevice);
+                    sensor->setNeedSaveDatabase(true);
+                }
             }
 
             const ApiAttribute a = rid.toApi(map, event);
@@ -2876,6 +2898,11 @@ bool DeRestPluginPrivate::sensorToMap(Sensor *sensor, QVariantMap &map, const Ap
     if (sensor->fingerPrint().endpoint != INVALID_ENDPOINT)
     {
         map[QLatin1String("ep")] = sensor->fingerPrint().endpoint;
+    }
+
+    if (sensor->etag.size() == 0)
+    {
+        updateSensorEtag(sensor);
     }
 
     QString etag = sensor->etag;
