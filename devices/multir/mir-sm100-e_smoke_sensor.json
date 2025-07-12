@@ -1,17 +1,10 @@
 {
   "schema": "devcap1.schema.json",
-  "uuid": "2787627b-76fe-43d4-97d4-9e93236ef963",
-  "manufacturername": [
-    "Heiman",
-    "HEIMAN"
-  ],
-  "modelid": [
-    "SmokeSensor-EF-3.0",
-    "SmokeSensor-EF-3.0"
-  ],
-  "vendor": "Heiman",
-  "product": "Smoke sensor (HS1SA)",
-  "sleeper": true,
+  "uuid": "c27eec90-0a12-4112-b06f-ac9184edb8bf",
+  "manufacturername": "MultIR",
+  "modelid": "MIR-SM100-E",
+  "product": "Smoke Sensor",
+  "sleeper": false,
   "status": "Gold",
   "subdevices": [
     {
@@ -27,6 +20,7 @@
         "device": "0x0402",
         "endpoint": "0x01",
         "in": [
+          "0x0000",
           "0x0001",
           "0x0500"
         ]
@@ -52,19 +46,7 @@
         },
         {
           "name": "attr/swversion",
-          "parse": {
-            "at": "0x0006",
-            "cl": "0x0000",
-            "ep": 1,
-            "eval": "Item.val = Attr.val",
-            "fn": "zcl:attr"
-          },
-          "read": {
-            "at": "0x0006",
-            "cl": "0x0000",
-            "ep": 1,
-            "fn": "zcl:attr"
-          }
+          "static": 1
         },
         {
           "name": "attr/type"
@@ -74,25 +56,16 @@
         },
         {
           "name": "config/battery",
-          "refresh.interval": 7300,
-          "awake": true,
           "parse": {
             "at": "0x0021",
             "cl": "0x0001",
             "ep": 1,
             "eval": "Item.val = Attr.val / 2",
             "fn": "zcl:attr"
-          },
-          "read": {
-            "at": "0x0021",
-            "cl": "0x0001",
-            "ep": 1,
-            "fn": "zcl:attr"
           }
         },
         {
-          "name": "config/enrolled",
-          "public": false
+          "name": "config/enrolled"
         },
         {
           "name": "config/on"
@@ -104,14 +77,16 @@
           "name": "config/reachable"
         },
         {
-          "name": "state/fire",
-          "default": false
+          "name": "state/fire"
         },
         {
           "name": "state/lastupdated"
         },
         {
           "name": "state/lowbattery"
+        },
+        {
+          "name": "state/test"
         }
       ]
     }
@@ -120,23 +95,16 @@
     {
       "bind": "unicast",
       "src.ep": 1,
-      "dst.ep": 1,
       "cl": "0x0001",
       "report": [
         {
           "at": "0x0021",
           "dt": "0x20",
-          "min": 300,
-          "max": 7200,
-          "change": "0x00000002"
+          "min": 600,
+          "max": 43200,
+          "change": "0x00000001"
         }
       ]
-    },
-    {
-      "bind": "unicast",
-      "src.ep": 1,
-      "dst.ep": 1,
-      "cl": "0x0500"
     }
   ]
 }
