@@ -1357,11 +1357,11 @@ void DeRestPluginPrivate::apsdeDataIndication(const deCONZ::ApsDataIndication &i
             break;
 
         case XIAOMI_CLUSTER_ID:
-            if (!DEV_TestStrict()) { handleXiaomiLumiClusterIndication(ind, zclFrame); }
+            if (!DEV_TestStrict() && !devManaged) { handleXiaomiLumiClusterIndication(ind, zclFrame); }
             break;
 
         case OCCUPANCY_SENSING_CLUSTER_ID:
-            if (!DEV_TestStrict()) { handleOccupancySensingClusterIndication(ind, zclFrame); }
+            if (!DEV_TestStrict() && !devManaged) { handleOccupancySensingClusterIndication(ind, zclFrame); }
             break;
 
         default:
