@@ -15687,6 +15687,10 @@ bool DeRestPlugin::isHttpTarget(const QHttpRequestHeader &hdr)
             return true;
         }
     }
+    else if (hdr.hasKey(QLatin1String("Upgrade")) && hdr.value(QLatin1String("Upgrade")) == QLatin1String("websocket"))
+    {
+        return true;
+    }
 
     return false;
 }
@@ -15699,6 +15703,12 @@ bool DeRestPlugin::isHttpTarget(const QHttpRequestHeader &hdr)
  */
 int DeRestPlugin::handleHttpRequest(const QHttpRequestHeader &hdr, QTcpSocket *sock)
 {
+    if (hdr.hasKey(QLatin1String("Upgrade")) && hdr.value(QLatin1String("Upgrade")) == QLatin1String("websocket"))
+    {
+        d->webSocketServer->handleExternalTcpSocket(hdr, sock);
+        return 0;
+    }
+
     QString content;
     QTextStream stream(sock);
 
