@@ -1977,6 +1977,39 @@ bool writeZclCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsCon
     return result.isEnqueued;
 }
 
+
+
+
+bool writeCoverCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &cmdParameters)
+{
+	auto map = cmdParameters.toMap();
+	QString command = map[QLatin1String("cmd")].toString();
+
+	DBG_Printf(DBG_INFO, "CVR_before: COMMAND: %s\n", qPrintable(command));
+
+	if (!command.isEmpty())
+	{
+		if (item->toBool() && command != "0x00")
+		{
+			command = "0x00";
+		}
+		else if (!item->toBool() && command != "0x01")
+		{
+			command = "0x01";
+		}
+	}
+	
+	DBG_Printf(DBG_INFO, "CVR_after: COMMAND: %s\n", qPrintable(command));
+	
+	const auto result = sendZclCommand(r, item, apsCtrl, cmdParameters);
+    return result.isEnqueued;
+}
+
+
+
+
+
+
 ParseFunction_t DA_GetParseFunction(const QVariant &params)
 {
     ParseFunction_t result = nullptr;
@@ -2067,12 +2100,13 @@ WriteFunction_t DA_GetWriteFunction(const QVariant &params)
 {
     WriteFunction_t result = nullptr;
 
-    const std::array<WriteFunction, 4> functions =
+    const std::array<WriteFunction, 5> functions =
     {
         WriteFunction(QLatin1String("zcl"), 1, writeZclAttribute), // Deprecated
         WriteFunction(QLatin1String("zcl:attr"), 1, writeZclAttribute),
         WriteFunction(QLatin1String("zcl:cmd"), 1, writeZclCommand),
-        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData)
+        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData),
+		WriteFunction(QLatin1String("cover:openclose"), 1, writeCoverCommand)
     };
 
     QString fnName;

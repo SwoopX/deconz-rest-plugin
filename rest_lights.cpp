@@ -2723,25 +2723,6 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
 
                 if (!ddfItem.writeParameters.isNull())
                 {
-                    auto writeParam = ddfItem.writeParameters.toMap();
-                    QString command = writeParam[QLatin1String("cmd")].toString();
-                    //if (map[param].type() == QVariant::String && map[param].toString() == "stop")
-
-                    DBG_Printf(DBG_INFO, "CVR_before: COMMAND: %s\n", qPrintable(command));
-
-                    if (!command.isEmpty())
-                    {
-                        if (targetOpen && command != "0x00")
-                        {
-                            command = "0x00";
-                        }
-                        else if (!targetOpen && command != "0x01")
-                        {
-                            command = "0x01";
-                        }
-                    }
-
-                    DBG_Printf(DBG_INFO, "CVR_after: COMMAND: %s\n", qPrintable(command));
                     change.addTargetValue(RStateOpen, targetOpen);
                     val = targetOpen;
                     param = "open";
