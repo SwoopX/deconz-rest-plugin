@@ -2731,11 +2731,11 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
                     {
                         if (targetOpen && command != "0x00")
                         {
-                            command = "0x00"
+                            command = "0x00";
                         }
                         else if (!targetOpen && command != "0x01")
                         {
-                            command = "0x01"
+                            command = "0x01";
                         }
                     }
                     change.addTargetValue(RStateOpen, targetOpen);
