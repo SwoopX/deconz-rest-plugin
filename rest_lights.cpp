@@ -2727,7 +2727,7 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
                     QString command = writeParam[QLatin1String("cmd")].toString();
                     //if (map[param].type() == QVariant::String && map[param].toString() == "stop")
 
-                    if (!command.isempty())
+                    if (!command.isEmpty())
                     {
                         if (targetOpen && command != "0x00")
                         {
