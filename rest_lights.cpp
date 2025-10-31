@@ -2718,10 +2718,26 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
             else if (hasOpen)
             {
                 ResourceItem *item = taskRef.lightNode->item(RStateOpen);
-                const auto ddfItem = DDF_GetItem(item);
+                //const auto ddfItem = DDF_GetItem(item);
+                auto ddfItem = DDF_GetItem(item);
 
                 if (!ddfItem.writeParameters.isNull())
                 {
+                    auto writeParam = ddfItem.writeParameters.toMap();
+                    QString command = writeParam[QLatin1String("cmd")].toString();
+                    //if (map[param].type() == QVariant::String && map[param].toString() == "stop")
+
+                    if (!command.isempty())
+                    {
+                        if (targetOpen && command != "0x00")
+                        {
+                            command = "0x00"
+                        }
+                        else if (!targetOpen && command != "0x01")
+                        {
+                            command = "0x01"
+                        }
+                    }
                     change.addTargetValue(RStateOpen, targetOpen);
                     val = targetOpen;
                     param = "open";
