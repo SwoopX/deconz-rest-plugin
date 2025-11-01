@@ -1992,16 +1992,16 @@ bool writeCoverCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsC
 		//if (item->toBool() && command != "0x00")
 		if (command != "0x00")
 		{
-			command = "0x00";
+			map[QLatin1String("cmd")] = "0x00";
 		}
 		//else if (!item->toBool() && command != "0x01")
 		else if (command != "0x01")
 		{
-			command = "0x01";
+			map[QLatin1String("cmd")] = "0x01";
 		}
 	}
 	
-	DBG_Printf(DBG_INFO, "CVR_after: COMMAND: %s\n", qPrintable(command));
+	DBG_Printf(DBG_INFO, "CVR_after: COMMAND: %s\n", qPrintable(map[QLatin1String("cmd")].toString()));
 	
 	const auto result = sendZclCommand(r, item, apsCtrl, cmdParameters);
     return result.isEnqueued;
