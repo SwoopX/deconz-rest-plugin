@@ -763,13 +763,6 @@ int DeRestPluginPrivate::setLightState(const ApiRequest &req, ApiResponse &rsp)
         return REQ_READY_SEND;
     }
 
-    Device *device = static_cast<Device*>(taskRef.lightNode->parentResource());
-    Resource *rsub = nullptr;
-    StateChange change(StateChange::StateCallFunction, SC_WriteZclAttribute, taskRef.lightNode->haEndpoint().endpoint());
-    if (device && device->managed())
-    {
-        rsub = DEV_GetSubDevice(device, nullptr, taskRef.lightNode->uniqueId());
-    }
     rsp.httpStatus = HttpStatusOk;
 
     if (!taskRef.lightNode->isAvailable())
@@ -809,7 +802,34 @@ int DeRestPluginPrivate::setLightState(const ApiRequest &req, ApiResponse &rsp)
     {
         return setXmasLightStripState(req, rsp, taskRef, map);
     }
-    else if (UseTuyaCluster(taskRef.lightNode->manufacturer()))
+    
+	
+	
+	
+	
+	Device *device = static_cast<Device*>(taskRef.lightNode->parentResource());
+    Resource *rsub = nullptr;
+	bool devManaged = false;
+	
+	if (device)
+    {
+        rsub = DEV_GetSubDevice(device, nullptr, taskRef.lightNode->uniqueId());
+        devManaged = device->managed();
+    }
+
+    StateChange change(StateChange::StateCallFunction, SC_WriteZclAttribute, taskRef.lightNode->haEndpoint().endpoint());
+	
+    if (device && device->managed())
+    {
+        rsub = DEV_GetSubDevice(device, nullptr, taskRef.lightNode->uniqueId());
+    }
+	
+	
+	
+	
+	
+	
+	if (UseTuyaCluster(taskRef.lightNode->manufacturer()))
     {
         //tuya window covering
         if (R_GetProductId(taskRef.lightNode).startsWith(QLatin1String("Tuya_COVD")))
@@ -821,7 +841,7 @@ int DeRestPluginPrivate::setLightState(const ApiRequest &req, ApiResponse &rsp)
         {
         }
         // handle by device code
-        else if (device && device->managed())
+        else if (devManaged)
         {
         }
         //switch and siren
@@ -2678,9 +2698,19 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
         return REQ_READY_SEND;
     }
 
-    Device *device = static_cast<Device*>(taskRef.lightNode->parentResource());
+	
+	
+	Device *device = static_cast<Device*>(taskRef.lightNode->parentResource());
+    Resource *rsub = nullptr;
+	bool devManaged = false;
+	
+	if (device)
+    {
+        rsub = DEV_GetSubDevice(device, nullptr, taskRef.lightNode->uniqueId());
+        devManaged = device->managed();
+    }
 
-    if (device && device->managed())
+    if (devManaged)
     {
         if (!hasLiftInc)
         {
@@ -2758,17 +2788,27 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
 
             if (hasWriteFunction)
             {
-                taskRef.lightNode->addStateChange(change);
-
                 QVariantMap rspItem;
                 QVariantMap rspItemState;
                 rspItemState[QString("/lights/%1/state/%2").arg(id).arg(param)] = val;
                 rspItem[QLatin1String("success")] = rspItemState;
                 rsp.list.append(rspItem);
-                // Don't update write-only state.alert.
+				
+				if (!taskRef.lightNode->stateChanges().empty())
+				{
+					DBG_Printf(DBG_INFO, "emit event/tick: " FMT_MAC "\n", (unsigned long long)taskRef.lightNode->address().ext());
+					enqueueEvent({taskRef.lightNode->prefix(), REventTick, taskRef.lightNode->uniqueId(), taskRef.lightNode->address().ext()});
+				}
 
-                rsp.etag = taskRef.lightNode->etag;
-                return REQ_READY_SEND;
+				rsp.etag = taskRef.lightNode->etag;
+
+				if (rsub)
+				{
+					rsub->addStateChange(change);
+				}
+				
+				processTasks();
+				return REQ_READY_SEND;
             }
         }
     }
