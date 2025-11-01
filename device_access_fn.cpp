@@ -1989,11 +1989,13 @@ bool writeCoverCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsC
 
 	if (!command.isEmpty())
 	{
-		if (item->toBool() && command != "0x00")
+		//if (item->toBool() && command != "0x00")
+		if (command != "0x00")
 		{
 			command = "0x00";
 		}
-		else if (!item->toBool() && command != "0x01")
+		//else if (!item->toBool() && command != "0x01")
+		else if (command != "0x01")
 		{
 			command = "0x01";
 		}
