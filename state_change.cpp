@@ -90,7 +90,7 @@ int StateChange::tick(uint64_t extAddr, Resource *r, deCONZ::ApsController *apsC
     }
     else if (m_state == StateCallFunction && m_changeFunction)
     {
-        DBG_Printf(DBG_INFO, "SC tick --> StateCallFunction %s, %s\n", item->descriptor().suffix, uniqueId);
+        DBG_Printf(DBG_INFO, "SC tick --> StateCallFunction %s, %s\n", r->item(RAttrUniqueId)->descriptor().suffix, uniqueId);
         if (m_changeFunction(r, this, apsCtrl) == 0)
         {
             for (auto &i : m_items)
@@ -160,7 +160,7 @@ void StateChange::verifyItemChange(const ResourceItem *item)
 	const char *uniqueId = "";
 
     {
-        const ResourceItem *item = r->item(RAttrUniqueId);
+        //const ResourceItem *item = r->item(RAttrUniqueId);
         if (item)
         {
             uniqueId = item->toCString();
