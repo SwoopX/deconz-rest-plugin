@@ -1893,11 +1893,11 @@ void Resource::cleanupStateChanges()
         {
             if (i->state() == StateChange::StateFinished)
             {
-                DBG_Printf(DBG_INFO, "SC state change finished: %s\n", qPrintable(item(RAttrUniqueId)->toString()));
+                DBG_Printf(DBG_INFO, "SC state change finished: %s, %s\n", qPrintable(item(RAttrUniqueId)->toString()), qPrintable(item->descriptor().suffix));
             }
             else if (i->state() == StateChange::StateFailed)
             {
-                DBG_Printf(DBG_INFO, "SC state change failed: %s\n", qPrintable(item(RAttrUniqueId)->toString()));
+                DBG_Printf(DBG_INFO, "SC state change failed: %s, %s\n", qPrintable(item(RAttrUniqueId)->toString()), qPrintable(item->descriptor().suffix));
             }
 
             m_stateChanges.erase(i);

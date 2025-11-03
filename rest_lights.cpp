@@ -2748,8 +2748,7 @@ int DeRestPluginPrivate::setWindowCoveringState(const ApiRequest &req, ApiRespon
             else if (hasOpen)
             {
                 ResourceItem *item = taskRef.lightNode->item(RStateOpen);
-                //const auto ddfItem = DDF_GetItem(item);
-                auto ddfItem = DDF_GetItem(item);
+                const auto ddfItem = DDF_GetItem(item);
 
                 if (!ddfItem.writeParameters.isNull())
                 {

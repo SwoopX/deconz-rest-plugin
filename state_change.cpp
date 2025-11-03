@@ -90,7 +90,7 @@ int StateChange::tick(uint64_t extAddr, Resource *r, deCONZ::ApsController *apsC
     }
     else if (m_state == StateCallFunction && m_changeFunction)
     {
-        DBG_Printf(DBG_INFO, "SC tick --> StateCallFunction\n");
+        DBG_Printf(DBG_INFO, "SC tick --> StateCallFunction %s, %s\n", item->descriptor().suffix, uniqueId);
         if (m_changeFunction(r, this, apsCtrl) == 0)
         {
             for (auto &i : m_items)
@@ -156,6 +156,16 @@ void StateChange::verifyItemChange(const ResourceItem *item)
     {
         return;
     }
+	
+	const char *uniqueId = "";
+
+    {
+        const ResourceItem *item = r->item(RAttrUniqueId);
+        if (item)
+        {
+            uniqueId = item->toCString();
+        }
+    }
 
     for (auto &i : m_items)
     {
@@ -164,12 +174,12 @@ void StateChange::verifyItemChange(const ResourceItem *item)
             if (i.targetValue == item->toVariant())
             {
                 i.verified = VerifySynced;
-                DBG_Printf(DBG_INFO, "SC %s: synced\n", i.suffix);
+                DBG_Printf(DBG_INFO, "SC vrfy --> %s: synced, %s\n", i.suffix, uniqueId);
             }
             else
             {
                 i.verified = VerifyNotSynced;
-                DBG_Printf(DBG_INFO, "SC %s: not synced\n", i.suffix);
+                DBG_Printf(DBG_INFO, "SC vrfy --> %s: not synced, %s\n", i.suffix, uniqueId);
             }
         }
 
@@ -182,7 +192,7 @@ void StateChange::verifyItemChange(const ResourceItem *item)
     if (syncedItems == m_items.size() && m_state != StateFinished)
     {
         m_state = StateFinished;
-        DBG_Printf(DBG_INFO, "SC --> StateFinished\n");
+        DBG_Printf(DBG_INFO, "SC vrfy --> StateFinished, %s\n", uniqueId);
     }
 }
 
