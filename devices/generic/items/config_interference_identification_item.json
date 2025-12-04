@@ -1,0 +1,9 @@
+{ 
+  "schema": "resourceitem1.schema.json", 
+  "id": "config/interference_identification", 
+  "datatype": "Bool", 
+  "access": "RW", 
+  "public": true, 
+  "description": "Identifies interference sources such as fans, air condition and other sources automatically.", 
+  "default": false 
+} 

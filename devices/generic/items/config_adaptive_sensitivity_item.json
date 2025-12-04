@@ -1,0 +1,9 @@
+{ 
+  "schema": "resourceitem1.schema.json", 
+  "id": "config/adaptive_sensitivity", 
+  "datatype": "Bool", 
+  "access": "RW", 
+  "public": true, 
+  "description": "Adapts sentitivity automatically.", 
+  "default": false 
+} 
