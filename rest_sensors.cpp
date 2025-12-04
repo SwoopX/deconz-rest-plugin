@@ -810,23 +810,17 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                         }
                     }
                 }
-
-                if (sensor->modelId().startsWith(QLatin1String("SPZB")) && hostFlags == 0) // Eurotronic Spirit
+				
+				if (rid.suffix == RConfigHostFlags) // Eurotronic Spirit
                 {
-                    ResourceItem *item = sensor->item(RConfigHostFlags);
-                    if (item)
+                    if (devManaged && rsub)
                     {
-                        hostFlags = item->toNumber();
-                    }
-                    else
-                    {
-                        rsp.list.append(errorToMap(ERR_ACTION_ERROR, QString("/sensors/%1/config/%2").arg(id).arg(pi.key()),
-                                                   QLatin1String("Could not set attribute")));
-                        continue;
+                        change.addTargetValue(rid.suffix, data.uinteger);
+                        rsub->addStateChange(change);
+                        updated = true;
                     }
                 }
-
-                if (rid.suffix == RConfigDeviceMode) // String
+                else if (rid.suffix == RConfigDeviceMode) // String
                 {
                     if (devManaged && rsub)
                     {
@@ -1450,7 +1444,7 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                             }
                         }
                     }
-                    else if (sensor->modelId().startsWith(QLatin1String("SPZB"))) // Eurotronic Spirit
+/*                     else if (sensor->modelId().startsWith(QLatin1String("SPZB"))) // Eurotronic Spirit
                     {
                         const auto match = matchKeyValue(data.string, RConfigModeValuesEurotronic);
 
@@ -1476,7 +1470,7 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                                 updated = true;
                             }
                         }
-                    }
+                    } */
                     else
                     {
                         const auto match = matchKeyValue(data.string, RConfigModeValues);
@@ -1694,16 +1688,6 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                             updated = true;
                         }
                     }
-                    else if (sensor->modelId().startsWith(QLatin1String("SPZB"))) // Eurotronic Spirit
-                    {
-                        if (data.boolean) { hostFlags |= 0x000080; } // set locked
-                        else              { hostFlags &= 0xffff6f; } // clear locked, clear disable off
-
-                        if (addTaskThermostatReadWriteAttribute(task, deCONZ::ZclWriteAttributesId, VENDOR_JENNIC, THERM_ATTRID_HOST_FLAGS, deCONZ::Zcl24BitUint, hostFlags))
-                        {
-                            updated = true;
-                        }
-                    }
                     else if (devManaged && rsub) // Managed by DDF ? why integer ?
                     {
                         data.uinteger = data.boolean; // Use integer representation
@@ -1723,17 +1707,7 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                 }
                 else if (rid.suffix == RConfigDisplayFlipped) // Boolean
                 {
-                    if (sensor->modelId().startsWith(QLatin1String("SPZB"))) // Eurotronic Spirit
-                    {
-                        if (data.boolean) { hostFlags |= 0x000002; } // set flipped
-                        else              { hostFlags &= 0xffffed; } // clear flipped, clear disable off
-
-                        if (addTaskThermostatReadWriteAttribute(task, deCONZ::ZclWriteAttributesId, VENDOR_JENNIC, THERM_ATTRID_HOST_FLAGS, deCONZ::Zcl24BitUint, hostFlags))
-                        {
-                            updated = true;
-                        }
-                    }
-                    else if (devManaged && rsub)
+                    if (devManaged && rsub)
                     {
                         data.uinteger = data.boolean; // Use integer representation
                         change.addTargetValue(rid.suffix, data.uinteger);

@@ -1,15 +1,15 @@
 {
   "schema": "devcap1.schema.json",
-  "uuid": "240fb1b8-8965-4549-a7eb-df13c38678e1",
-  "manufacturername": "Third Reality, Inc",
-  "modelid": "3RSMR01067Z",
-  "vendor": "Third Reality",
-  "product": "Motion Sensor R1 (3RSMR01067Z)",
+  "uuid": "ecd28fe6-2e26-4f0d-9f6d-3e9e956229f2",
+  "manufacturername": "SMaBiT",
+  "modelid": "AV2010/21C",
+  "vendor": "SMaBiT",
+  "product": "Flat magnetic contact sensor (AV2010/21C)",
   "sleeper": true,
-  "status": "Gold",
+  "status": "Silver",
   "subdevices": [
     {
-      "type": "$TYPE_PRESENCE_SENSOR",
+      "type": "$TYPE_OPEN_CLOSE_SENSOR",
       "restapi": "/sensors",
       "uuid": [
         "$address.ext",
@@ -24,9 +24,6 @@
           "0x0000",
           "0x0001",
           "0x0500"
-        ],
-        "out": [
-          "0x0019"
         ]
       },
       "items": [
@@ -58,19 +55,11 @@
           "name": "attr/uniqueid"
         },
         {
-          "name": "config/alert"
+          "name": "config/checkin"
         },
         {
-          "name": "config/battery",
-          "parse": {
-            "at": "0x0021",
-            "cl": "0x0001",
-            "ep": 1,
-            "eval": "Item.val = Attr.val"
-          }
-        },
-        {
-          "name": "config/duration"
+          "name": "config/enrolled",
+          "public": false
         },
         {
           "name": "config/on"
@@ -79,16 +68,16 @@
           "name": "config/pending"
         },
         {
-          "name": "config/enrolled"
-        },
-        {
           "name": "config/reachable"
         },
         {
           "name": "state/lastupdated"
         },
         {
-          "name": "state/presence"
+          "name": "state/lowbattery"
+        },
+        {
+          "name": "state/open"
         }
       ]
     }
@@ -97,16 +86,7 @@
     {
       "bind": "unicast",
       "src.ep": 1,
-      "cl": "0x0001",
-      "report": [
-        {
-          "at": "0x0021",
-          "dt": "0x20",
-          "min": 300,
-          "max": 7200,
-          "change": "0x01"
-        }
-      ]
+      "cl": "0x0500"
     }
   ]
 }

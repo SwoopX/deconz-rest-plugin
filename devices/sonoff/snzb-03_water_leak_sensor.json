@@ -5,6 +5,7 @@
   "modelid": "SNZB-03",
   "vendor": "Sonoff/eWeLink",
   "product": "Water leak sensor (SNZB-03)",
+  "matchexpr": "R.item('attr/zonetype').val === 0x002a",
   "sleeper": true,
   "status": "Gold",
   "subdevices": [
@@ -56,7 +57,7 @@
         },
         {
           "name": "config/battery",
-          "refresh.interval": 7265,
+          "refresh.interval": 86400,
           "read": {
             "at": "0x0021",
             "cl": "0x0001",
@@ -67,7 +68,7 @@
             "at": "0x0021",
             "cl": "0x0001",
             "ep": 1,
-            "eval": "Item.val = Attr.val / 2;",
+            "eval": "Item.val = Attr.val / 2",
             "fn": "zcl:attr"
           },
           "default": 0
@@ -92,13 +93,18 @@
     {
       "bind": "unicast",
       "src.ep": 1,
+      "cl": "0x0500"
+    },
+    {
+      "bind": "unicast",
+      "src.ep": 1,
       "cl": "0x0001",
       "report": [
         {
           "at": "0x0021",
           "dt": "0x20",
           "min": 3600,
-          "max": 7200,
+          "max": 14400,
           "change": "0x00000002"
         }
       ]
