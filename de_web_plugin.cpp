@@ -1,5 +1,5 @@
  /*
- * Copyright (c) 2017-2025 dresden elektronik ingenieurtechnik gmbh.
+ * Copyright (c) 2017-2026 dresden elektronik ingenieurtechnik gmbh.
  * All rights reserved.
  *
  * The software in this package is published under the terms of the BSD
@@ -46,7 +46,9 @@
 #include "de_web_plugin_private.h"
 #include "de_web_widget.h"
 #include "ui/device_widget.h"
+#ifdef USE_GATEWAY_API
 #include "gateway_scanner.h"
+#endif
 #include "ias_ace.h"
 #include "ias_zone.h"
 #include "json.h"
@@ -650,11 +652,12 @@ DeRestPluginPrivate::DeRestPluginPrivate(QObject *parent) :
 
     webSocketServer = 0;
 
+#ifdef USE_GATEWAY_API
     gwScanner = new GatewayScanner(this);
     connect(gwScanner, SIGNAL(foundGateway(QHostAddress,quint16,QString,QString)),
             this, SLOT(foundGateway(QHostAddress,quint16,QString,QString)));
 //    gwScanner->startScan();
-
+#endif
     QString dataPath = deCONZ::getStorageLocation(deCONZ::ApplicationsDataLocation);
 
     saveDatabaseItems = 0;
@@ -946,6 +949,7 @@ DeRestPluginPrivate::~DeRestPluginPrivate()
         inetDiscoveryManager->deleteLater();
         inetDiscoveryManager = 0;
     }
+    upnpTimer->stop();
     delete deviceJs;
     deviceJs = nullptr;
     eventEmitter = nullptr;
@@ -1262,7 +1266,9 @@ void DeRestPluginPrivate::apsdeDataIndication(const deCONZ::ApsDataIndication &i
 
         case SCENE_CLUSTER_ID:
             handleSceneClusterIndication(ind, zclFrame);
+#ifdef USE_GATEWAY_API
             handleClusterIndicationGateways(ind, zclFrame);
+#endif
             break;
 
         case OTAU_CLUSTER_ID:
@@ -1274,14 +1280,18 @@ void DeRestPluginPrivate::apsdeDataIndication(const deCONZ::ApsDataIndication &i
             break;
 
         case LEVEL_CLUSTER_ID:
+#ifdef USE_GATEWAY_API
             handleClusterIndicationGateways(ind, zclFrame);
+#endif
             break;
 
         case ONOFF_CLUSTER_ID:
             if (!DEV_TestStrict())
             {
                 handleOnOffClusterIndication(ind, zclFrame);
+#ifdef USE_GATEWAY_API
                 handleClusterIndicationGateways(ind, zclFrame);
+#endif
             }
             break;
 
@@ -11425,8 +11435,8 @@ void DeRestPluginPrivate::storeRecoverOnOffBri(LightNode *lightNode)
  */
 void DeRestPluginPrivate::pushClientForClose(QTcpSocket *sock, int closeTimeout)
 {
-    std::vector<TcpClient>::iterator i = openClients.begin();
-    std::vector<TcpClient>::iterator end = openClients.end();
+    auto i = openClients.begin();
+    auto end = openClients.end();
 
     for ( ;i != end; ++i)
     {
@@ -11448,9 +11458,7 @@ void DeRestPluginPrivate::pushClientForClose(QTcpSocket *sock, int closeTimeout)
     client.sock = sock;
     client.closeTimeout = closeTimeout;
 
-    connect(sock, SIGNAL(destroyed()),
-            this, SLOT(clientSocketDestroyed()));
-
+    connect(sock, &QTcpSocket::destroyed, this, &DeRestPluginPrivate::clientSocketDestroyed);
     openClients.push_back(client);
 }
 
@@ -15937,10 +15945,12 @@ int DeRestPlugin::handleHttpRequest(const QHttpRequestHeader &hdr, QTcpSocket *s
                 {
                     ret = d->handleUserparameterApi(req, rsp);
                 }
+#ifdef USE_GATEWAY_API
                 else if (apiModule == QLatin1String("gateways"))
                 {
                     ret = d->handleGatewaysApi(req, rsp);
                 }
+#endif // USE_GATEWAY_API
                 else if (apiModule == QLatin1String("alarmsystems") && d->alarmSystems)
                 {
                     ret = AS_handleAlarmSystemsApi(req, rsp, *d->alarmSystems, d->eventEmitter);
@@ -16070,7 +16080,17 @@ int DeRestPlugin::handleHttpRequest(const QHttpRequestHeader &hdr, QTcpSocket *s
  */
 void DeRestPlugin::clientGone(QTcpSocket *sock)
 {
-    d->eventListeners.remove(sock);
+    auto i = d->openClients.begin();
+    auto end = d->openClients.end();
+
+    for (; i != end; ++i)
+    {
+        if (i->sock == sock)
+        {
+            d->openClients.erase(i);
+            return;
+        }
+    }
 }
 
 bool DeRestPlugin::pluginActive() const
@@ -16091,8 +16111,8 @@ bool DeRestPlugin::dbSaveAllowed() const
  */
 void DeRestPluginPrivate::openClientTimerFired()
 {
-    std::vector<TcpClient>::iterator i = openClients.begin();
-    std::vector<TcpClient>::iterator end = openClients.end();
+    auto i = openClients.begin();
+    auto end = openClients.end();
 
     for ( ; i != end; ++i)
     {
@@ -16110,15 +16130,10 @@ void DeRestPluginPrivate::openClientTimerFired()
 
                 if (sock->state() == QTcpSocket::ConnectedState)
                 {
-                    DBG_Printf(DBG_INFO_L2, "Close socket port: %u\n", sock->peerPort());
                     sock->close();
                 }
-                else
-                {
-                    DBG_Printf(DBG_INFO_L2, "Close socket state = %d\n", sock->state());
-                }
-
                 sock->deleteLater();
+                openClients.erase(i);
                 return;
             }
         }
@@ -16134,23 +16149,11 @@ void DeRestPluginPrivate::openClientTimerFired()
 
 /*! Is called before the client socket will be deleted.
  */
-void DeRestPluginPrivate::clientSocketDestroyed()
+void DeRestPluginPrivate::clientSocketDestroyed(QObject *obj)
 {
-    QObject *obj = sender();
-
-    std::vector<TcpClient>::iterator i = openClients.begin();
-    std::vector<TcpClient>::iterator end = openClients.end();
-
-    for ( ; i != end; ++i)
+    if (q_ptr)
     {
-        if (i->sock == obj)
-        {
-            //int dt = i->created.secsTo(QDateTime::currentDateTime());
-            //DBG_Printf(DBG_INFO, "remove socket %s : %u after %d s, %s\n", qPrintable(sock->peerAddress().toString()), sock->peerPort(), dt, qPrintable(i->hdr.path()));
-            *i = openClients.back();
-            openClients.pop_back();
-            return;
-        }
+        q_ptr->clientGone(static_cast<QTcpSocket*>(obj));
     }
 }
 
