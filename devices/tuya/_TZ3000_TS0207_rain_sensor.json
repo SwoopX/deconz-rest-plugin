@@ -1,14 +1,21 @@
 {
   "schema": "devcap1.schema.json",
-  "uuid": "47d82bcb-9308-41bb-b3d3-94dcc6d67501",
-  "manufacturername": "HEIMAN",
-  "modelid": "COSensor-EM",
-  "product": "COSensor-EM",
+  "uuid": "33d78af8-da01-4e00-af65-9bcbfd6ce0cf",
+  "manufacturername": [
+    "_TZ3000_imdfhhud",
+    "_TZ3000_otwpdq1d"
+  ],
+  "modelid": [
+    "TS0207",
+    "TS0207"
+  ],
+  "vendor": "Tuya",
+  "product": "Rain sensor (TS0207)",
   "sleeper": true,
   "status": "Gold",
   "subdevices": [
     {
-      "type": "$TYPE_CARBONMONOXIDE_SENSOR",
+      "type": "$TYPE_WATER_LEAK_SENSOR",
       "restapi": "/sensors",
       "uuid": [
         "$address.ext",
@@ -20,6 +27,7 @@
         "device": "0x0402",
         "endpoint": "0x01",
         "in": [
+          "0x0000",
           "0x0001",
           "0x0500"
         ]
@@ -46,17 +54,17 @@
         {
           "name": "attr/swversion",
           "parse": {
-            "at": "0x0006",
-            "cl": "0x0000",
+            "fn": "zcl:attr",
             "ep": 1,
-            "eval": "Item.val = Attr.val",
-            "fn": "zcl:attr"
+            "cl": "0x0000",
+            "at": "0x0001",
+            "script": "tuya_swversion.js"
           },
           "read": {
-            "at": "0x0006",
-            "cl": "0x0000",
+            "fn": "zcl:attr",
             "ep": 1,
-            "fn": "zcl:attr"
+            "cl": "0x0000",
+            "at": "0x0001"
           }
         },
         {
@@ -67,7 +75,7 @@
         },
         {
           "name": "config/battery",
-          "refresh.interval": 7300,
+          "awake": true,
           "parse": {
             "at": "0x0021",
             "cl": "0x0001",
@@ -75,12 +83,7 @@
             "eval": "Item.val = Attr.val / 2",
             "fn": "zcl:attr"
           },
-          "read": {
-            "at": "0x0021",
-            "cl": "0x0001",
-            "ep": 1,
-            "fn": "zcl:attr"
-          }
+          "default": 0
         },
         {
           "name": "config/enrolled",
@@ -96,17 +99,11 @@
           "name": "config/reachable"
         },
         {
-          "name": "state/carbonmonoxide",
-          "default": false
-        },
-        {
           "name": "state/lastupdated"
         },
         {
-          "name": "state/lowbattery"
-        },
-        {
-          "name": "state/tampered"
+          "name": "state/water",
+          "awake": true
         }
       ]
     }
@@ -121,9 +118,9 @@
         {
           "at": "0x0021",
           "dt": "0x20",
-          "min": 300,
-          "max": 7200,
-          "change": "0x00000002"
+          "min": 7200,
+          "max": 43200,
+          "change": "0x00000001"
         }
       ]
     },

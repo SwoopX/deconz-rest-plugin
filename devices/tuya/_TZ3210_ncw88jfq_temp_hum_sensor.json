@@ -1,19 +1,26 @@
 {
   "schema": "devcap1.schema.json",
-  "uuid": "447891a5-bc6c-4daa-a8ee-9e5f2b2a898c",
-  "manufacturername": "_TZ3000_typdpbpg",
-  "modelid": "TS011F",
+  "uuid": "f490468c-83c1-4367-9168-4043f59e23cc",
+  "manufacturername": [
+    "_TZ3210_ncw88jfq",
+    "_TZ3000_isw9u95y"
+  ],
+  "modelid": [
+    "TS0201",
+    "TS0201"
+  ],
   "vendor": "Tuya",
-  "product": "Smart plug EU (TS011F)",
-  "sleeper": false,
+  "product": "Temperature and humidity sensor",
+  "sleeper": true,
   "status": "Gold",
   "subdevices": [
     {
-      "type": "$TYPE_ON_OFF_PLUGIN_UNIT",
-      "restapi": "/lights",
+      "type": "$TYPE_TEMPERATURE_SENSOR",
+      "restapi": "/sensors",
       "uuid": [
         "$address.ext",
-        "0x01"
+        "0x01",
+        "0x0402"
       ],
       "items": [
         {
@@ -57,24 +64,52 @@
           "name": "attr/uniqueid"
         },
         {
-          "name": "state/alert"
+          "name": "config/battery",
+          "refresh.interval": 86400,
+          "read": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "eval": "Item.val = Attr.val / 2"
+          },
+          "default": 0
         },
         {
-          "name": "state/on",
-          "refresh.interval": 360
+          "name": "config/offset",
+          "default": 0
         },
         {
-          "name": "state/reachable"
+          "name": "config/on"
+        },
+        {
+          "name": "config/reachable"
+        },
+        {
+          "name": "config/tuya_unlock"
+        },
+        {
+          "name": "state/lastupdated"
+        },
+        {
+          "name": "state/temperature",
+          "awake": true,
+          "default": 0
         }
       ]
     },
     {
-      "type": "$TYPE_CONSUMPTION_SENSOR",
+      "type": "$TYPE_HUMIDITY_SENSOR",
       "restapi": "/sensors",
       "uuid": [
         "$address.ext",
         "0x01",
-        "0x0702"
+        "0x0405"
       ],
       "items": [
         {
@@ -105,7 +140,10 @@
             "script": "tuya_swversion.js"
           },
           "read": {
-            "fn": "none"
+            "fn": "zcl:attr",
+            "ep": 1,
+            "cl": "0x0000",
+            "at": "0x0001"
           }
         },
         {
@@ -115,92 +153,46 @@
           "name": "attr/uniqueid"
         },
         {
+          "name": "config/battery",
+          "refresh.interval": 86400,
+          "read": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x0021",
+            "cl": "0x0001",
+            "ep": 1,
+            "eval": "Item.val = Attr.val / 2"
+          },
+          "default": 0
+        },
+        {
+          "name": "config/offset",
+          "default": 0
+        },
+        {
           "name": "config/on"
         },
         {
           "name": "config/reachable"
         },
         {
-          "name": "state/consumption",
-          "refresh.interval": 360,
+          "name": "state/humidity",
+          "awake": true,
           "parse": {
             "at": "0x0000",
-            "cl": "0x0702",
+            "cl": "0x0405",
             "ep": 1,
-            "eval": "Item.val = Attr.val * 10;"
-          }
-        },
-        {
-          "name": "state/lastupdated"
-        }
-      ]
-    },
-    {
-      "type": "$TYPE_POWER_SENSOR",
-      "restapi": "/sensors",
-      "uuid": [
-        "$address.ext",
-        "0x01",
-        "0x0b04"
-      ],
-      "items": [
-        {
-          "name": "attr/id"
-        },
-        {
-          "name": "attr/lastannounced"
-        },
-        {
-          "name": "attr/lastseen"
-        },
-        {
-          "name": "attr/manufacturername"
-        },
-        {
-          "name": "attr/modelid"
-        },
-        {
-          "name": "attr/name"
-        },
-        {
-          "name": "attr/swversion",
-          "parse": {
-            "fn": "zcl:attr",
-            "ep": 1,
-            "cl": "0x0000",
-            "at": "0x0001",
-            "script": "tuya_swversion.js"
+            "eval": "Item.val = (Attr.val * 10) + R.item('config/offset').val",
+            "fn": "zcl:attr"
           },
-          "read": {
-            "fn": "none"
-          }
-        },
-        {
-          "name": "attr/type"
-        },
-        {
-          "name": "attr/uniqueid"
-        },
-        {
-          "name": "config/on"
-        },
-        {
-          "name": "config/reachable"
-        },
-        {
-          "name": "state/current",
-          "refresh.interval": 360
+          "default": 0
         },
         {
           "name": "state/lastupdated"
-        },
-        {
-          "name": "state/power",
-          "refresh.interval": 360
-        },
-        {
-          "name": "state/voltage",
-          "refresh.interval": 360
         }
       ]
     }
@@ -209,55 +201,42 @@
     {
       "bind": "unicast",
       "src.ep": 1,
-      "cl": "0x0006",
+      "cl": "0x0001",
       "report": [
         {
-          "at": "0x0000",
-          "dt": "0x10",
-          "min": 1,
-          "max": 300
+          "at": "0x0021",
+          "dt": "0x20",
+          "min": 3600,
+          "max": 43200,
+          "change": "0x00000002"
         }
       ]
     },
     {
       "bind": "unicast",
       "src.ep": 1,
-      "cl": "0x0702",
+      "cl": "0x0402",
       "report": [
         {
           "at": "0x0000",
-          "dt": "0x25",
-          "min": 1,
-          "max": 300,
-          "change": "0x0000000A"
-        }
-      ]
-    },
-    {
-      "bind": "unicast",
-      "src.ep": 1,
-      "cl": "0x0B04",
-      "report": [
-        {
-          "at": "0x0505",
-          "dt": "0x21",
-          "min": 1,
-          "max": 300,
-          "change": "0x00000001"
-        },
-        {
-          "at": "0x0508",
-          "dt": "0x21",
-          "min": 1,
+          "dt": "0x29",
+          "min": 60,
           "max": 300,
           "change": "0x00000064"
-        },
+        }
+      ]
+    },
+    {
+      "bind": "unicast",
+      "src.ep": 1,
+      "cl": "0x0405",
+      "report": [
         {
-          "at": "0x050B",
-          "dt": "0x29",
-          "min": 1,
+          "at": "0x0000",
+          "dt": "0x21",
+          "min": 60,
           "max": 300,
-          "change": "0x00000001"
+          "change": "0x00000064"
         }
       ]
     }
