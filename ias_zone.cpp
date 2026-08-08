@@ -167,6 +167,9 @@ void DeRestPluginPrivate::handleIasZoneClusterIndication(const deCONZ::ApsDataIn
         }
     }
 
+    auto *device = DEV_GetDevice(m_devices, ind.srcAddress().ext());
+    const bool devManaged = device && device->managed();
+
     Sensor *sensor = nullptr;
     ResourceItem *itemIasState = nullptr;
     ResourceItem *itemPending = nullptr;
@@ -291,7 +294,7 @@ void DeRestPluginPrivate::handleIasZoneClusterIndication(const deCONZ::ApsDataIn
 
                 case IAS_ZONE_STATUS:
                 {
-                    if (!DEV_TestStrict())
+                    if (!DEV_TestStrict() && !devManaged)
                     {
                         const quint16 zoneStatus = attr.numericValue().u16;   // might be reported or received via CMD_STATUS_CHANGE_NOTIFICATION
 
@@ -352,7 +355,7 @@ void DeRestPluginPrivate::handleIasZoneClusterIndication(const deCONZ::ApsDataIn
     // Read ZCL Cluster Command Response
     if (isClusterCmd && zclFrame.commandId() == CMD_STATUS_CHANGE_NOTIFICATION)
     {
-        if (!DEV_TestStrict())
+        if (!DEV_TestStrict() && !devManaged)
         {
             quint16 zoneStatus;
             quint8 extendedStatus;
