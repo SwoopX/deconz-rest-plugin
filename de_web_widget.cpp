@@ -128,7 +128,7 @@ void DeRestWidget::readBindingTableTriggered()
         if (restNode)
         {
             restNode->setMgmtBindSupported(true);
-            plugin->d->readBindingTable(restNode, 0);
+            plugin->d->readBindingTable(restNode, 0, true);
         }
     }
 }

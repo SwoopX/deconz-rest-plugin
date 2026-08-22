@@ -1359,7 +1359,7 @@ public:
     uint8_t getSrcEndpoint(RestNodeBase *restNode, const deCONZ::ApsDataRequest &req);
     bool processZclAttributes(LightNode *lightNode);
     bool processZclAttributes(Sensor *sensorNode);
-    bool readBindingTable(RestNodeBase *node, quint8 startIndex);
+    bool readBindingTable(RestNodeBase *node, quint8 startIndex, bool force = false);
     bool getGroupIdentifiers(RestNodeBase *node, quint8 endpoint, quint8 startIndex);
     bool readAttributes(RestNodeBase *restNode, quint8 endpoint, uint16_t clusterId, const std::vector<uint16_t> &attributes, uint16_t manufacturerCode = 0);
     bool writeAttribute(RestNodeBase *restNode, quint8 endpoint, uint16_t clusterId, const deCONZ::ZclAttribute &attribute, uint16_t manufacturerCode = 0);

@@ -130,7 +130,8 @@ deCONZ::Binding convertToCoreBinding(const Binding &bnd)
     \param startIndex the index to start the reading
     \return true if the request is queued
  */
-bool DeRestPluginPrivate::readBindingTable(RestNodeBase *node, quint8 startIndex)
+//bool DeRestPluginPrivate::readBindingTable(RestNodeBase *node, quint8 startIndex)
+bool DeRestPluginPrivate::readBindingTable(RestNodeBase *node, quint8 startIndex, bool force)
 {
     DBG_Assert(node != 0);
 
@@ -140,7 +141,8 @@ bool DeRestPluginPrivate::readBindingTable(RestNodeBase *node, quint8 startIndex
     }
 
     Device *device = DEV_GetDevice(m_devices, node->address().ext());
-    if (device && device->managed())
+    //if (device && device->managed())
+    if (!force && device && device->managed())
     {
         return false;
     }
