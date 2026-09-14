@@ -2019,7 +2019,7 @@ bool writeZclCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsCon
 
     Implementation notes
 
-    - Step 1 and 2 are sent as one manufacturer specific write attributes command (J1_StepPrepare).
+    - Step 1 and 2 are sent as one manufacturer specific write attributes command (J1StepPrepare).
     - Step 4 sends no "stop", "move up" 2 seconds after "move down" reverses the motor (as the legacy code did).
     - Step 8 (tilt transition steps) is not handled, these can be set via config/ubisys_j1_lifttotilttransitionsteps(2).
     - All frames are sent via writeZclCommand() with crafted parameters. ZCL_SendCommand() doesn't use APS acknowledged
@@ -2040,23 +2040,23 @@ bool writeZclCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsCon
 #define UBISYS_J1_NO_REPORT_FALLBACK_MS   30000            // legacy timing if no OperationalStatus report arrives
 #define UBISYS_J1_DEFAULT_CHANGE_TIMEOUT  180              // seconds, StateChange default
 
-enum J1_CalibrationStep : uint8_t
+enum J1CalibrationStep : uint8_t
 {
-    J1_StepCleanup = 0,          //! Mode = 0x00, clears calibration mode of an aborted run
-    J1_StepPrepare = 1,          //! type + limits (manufacturer specific)
-    J1_StepEnterCalibration = 2, //! Mode = 0x02
-    J1_StepMoveDown = 3,         //! move down a bit
-    J1_StepMoveUp = 4,           //! reverse, search upper bound
-    J1_StepSearchLowerBound = 5, //! motor stopped at top, move down
-    J1_StepSearchUpperBound = 6, //! motor stopped at bottom, move up
-    J1_StepLeaveCalibration = 7, //! motor stopped at top, Mode = 0x00
-    J1_StepDone = 8              //! waits until the StateChange has verified or timed out
+    J1StepCleanup = 0,          //! Mode = 0x00, clears calibration mode of an aborted run
+    J1StepPrepare = 1,          //! type + limits (manufacturer specific)
+    J1StepEnterCalibration = 2, //! Mode = 0x02
+    J1StepMoveDown = 3,         //! move down a bit
+    J1StepMoveUp = 4,           //! reverse, search upper bound
+    J1StepSearchLowerBound = 5, //! motor stopped at top, move down
+    J1StepSearchUpperBound = 6, //! motor stopped at bottom, move up
+    J1StepLeaveCalibration = 7, //! motor stopped at top, Mode = 0x00
+    J1StepDone = 8              //! waits until the StateChange has verified or timed out
 };
 
 struct UbisysJ1CalibrationCtx
 {
     uint64_t extAddr = 0; //! 0 = free entry
-    uint8_t step = J1_StepCleanup;
+    uint8_t step = J1StepCleanup;
     uint8_t coveringType = 0;
     deCONZ::SteadyTimeRef stepStart; //! for elapsed time checks
     QDateTime stepStartWall; //! compared with ResourceItem::lastSet()
@@ -2065,7 +2065,7 @@ struct UbisysJ1CalibrationCtx
 static std::array<UbisysJ1CalibrationCtx, UBISYS_J1_TABLE_SIZE> _DA_J1CalibrationTable;
 
 /*! Moves \p ctx to \p step and restarts the step timers. */
-static void J1_SetStep(UbisysJ1CalibrationCtx *ctx, uint8_t step)
+static void J1SetStep(UbisysJ1CalibrationCtx *ctx, uint8_t step)
 {
     DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step %u --> %u\n", (unsigned long long)ctx->extAddr, ctx->step, step);
 
@@ -2075,11 +2075,11 @@ static void J1_SetStep(UbisysJ1CalibrationCtx *ctx, uint8_t step)
 }
 
 /*! Starts a new calibration run in \p ctx for \p extAddr. */
-static void J1_StartContext(UbisysJ1CalibrationCtx *ctx, uint64_t extAddr)
+static void J1StartContext(UbisysJ1CalibrationCtx *ctx, uint64_t extAddr)
 {
     *ctx = {};
     ctx->extAddr = extAddr;
-    J1_SetStep(ctx, J1_StepCleanup);
+    J1SetStep(ctx, J1StepCleanup);
 }
 
 /*! Returns the calibration context of \p extAddr, a new one is started if none exists.
@@ -2089,7 +2089,7 @@ static void J1_StartContext(UbisysJ1CalibrationCtx *ctx, uint64_t extAddr)
 
     \returns nullptr if the table is full.
  */
-static UbisysJ1CalibrationCtx *J1_GetContext(uint64_t extAddr)
+static UbisysJ1CalibrationCtx *J1GetContext(uint64_t extAddr)
 {
     const auto now = deCONZ::steadyTimeRef();
     UbisysJ1CalibrationCtx *freeCtx = nullptr;
@@ -2102,7 +2102,7 @@ static UbisysJ1CalibrationCtx *J1_GetContext(uint64_t extAddr)
         {
             if (stale)
             {
-                J1_StartContext(&ctx, extAddr);
+                J1StartContext(&ctx, extAddr);
             }
             return &ctx;
         }
@@ -2119,7 +2119,7 @@ static UbisysJ1CalibrationCtx *J1_GetContext(uint64_t extAddr)
         return nullptr;
     }
 
-    J1_StartContext(freeCtx, extAddr);
+    J1StartContext(freeCtx, extAddr);
     return freeCtx;
 }
 
@@ -2134,7 +2134,7 @@ static UbisysJ1CalibrationCtx *J1_GetContext(uint64_t extAddr)
     \param payloadHex - ZCL payload as hex string, empty for no payload
     \returns true if the request was enqueued.
  */
-static bool J1_SendZcl(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &writeParameters,
+static bool J1SendZclCommandWrapper(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &writeParameters,
                        const char *cmd, const char *fc, const char *mf, const QString &payloadHex)
 {
     QVariantMap params;
@@ -2168,7 +2168,7 @@ static bool J1_SendZcl(const Resource *r, const ResourceItem *item, deCONZ::ApsC
       only reports on change, a long travel doesn't produce intermediate reports).
     - If no report was received at all, fall back to the legacy timing.
  */
-static bool J1_MotorStopped(const Resource *r, const UbisysJ1CalibrationCtx &ctx, int64_t minStepMs)
+static bool J1MotorStopped(const Resource *r, const UbisysJ1CalibrationCtx &ctx, int64_t minStepMs)
 {
     const auto elapsed = deCONZ::steadyTimeRef() - ctx.stepStart;
 
@@ -2226,22 +2226,22 @@ static bool writeUbisysJ1Calibration(const Resource *r, const ResourceItem *item
         return false;
     }
 
-    UbisysJ1CalibrationCtx *ctx = J1_GetContext(extAddr);
+    UbisysJ1CalibrationCtx *ctx = J1GetContext(extAddr);
 
     if (!ctx)
     {
         return false;
     }
 
-    if (ctx->step != J1_StepCleanup && ctx->coveringType != type)
+    if (ctx->step != J1StepCleanup && ctx->coveringType != type)
     {
         DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: restart for type %u\n", (unsigned long long)extAddr, unsigned(type));
-        J1_StartContext(ctx, extAddr); // new request replaces running calibration
+        J1StartContext(ctx, extAddr); // new request replaces running calibration
     }
 
     ctx->coveringType = static_cast<uint8_t>(type);
 
-    if (ctx->step == J1_StepDone)
+    if (ctx->step == J1StepDone)
     {
         // The StateChange called again, the window covering type couldn't be verified.
         // Don't restart the motor sequence for the lifetime of that StateChange.
@@ -2258,7 +2258,7 @@ static bool writeUbisysJ1Calibration(const Resource *r, const ResourceItem *item
             return false;
         }
 
-        J1_StartContext(ctx, extAddr);
+        J1StartContext(ctx, extAddr);
     }
 
     // Write attributes payloads: attribute id (little endian), data type, value (little endian)
@@ -2278,66 +2278,75 @@ static bool writeUbisysJ1Calibration(const Resource *r, const ResourceItem *item
 
     switch (ctx->step)
     {
-    case J1_StepCleanup:
-        if (J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, leaveCalibration))
+    case J1StepCleanup:
+        if (J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, leaveCalibration))
         {
-            J1_SetStep(ctx, J1_StepPrepare);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 0, write Mode = 0x00 (clear calibration mode of a previous run)\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepPrepare);
         }
         break;
 
-    case J1_StepPrepare:
-        if (J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE_MFR, UBISYS_J1_MFR_CODE, prepare))
+    case J1StepPrepare:
+        if (J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE_MFR, UBISYS_J1_MFR_CODE, prepare))
         {
-            J1_SetStep(ctx, J1_StepEnterCalibration);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 1, write WindowCoveringType = %u, reset limits and steps (mf 0x10F2)\n", (unsigned long long)extAddr, ctx->coveringType);
+            J1SetStep(ctx, J1StepEnterCalibration);
         }
         break;
 
-    case J1_StepEnterCalibration:
-        if (J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, enterCalibration))
+    case J1StepEnterCalibration:
+        if (J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, enterCalibration))
         {
-            J1_SetStep(ctx, J1_StepMoveDown);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 2, write Mode = 0x02 (enter calibration mode)\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepMoveDown);
         }
         break;
 
-    case J1_StepMoveDown:
-        if (elapsed.val >= 2000 && J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_DOWN, nullptr, nullptr, QString()))
+    case J1StepMoveDown:
+        if (elapsed.val >= 2000 && J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_DOWN, nullptr, nullptr, QString()))
         {
-            J1_SetStep(ctx, J1_StepMoveUp);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 3, move down\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepMoveUp);
         }
         break;
 
-    case J1_StepMoveUp:
-        if (elapsed.val >= 2000 && J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_UP, nullptr, nullptr, QString()))
+    case J1StepMoveUp:
+        if (elapsed.val >= 2000 && J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_UP, nullptr, nullptr, QString()))
         {
-            J1_SetStep(ctx, J1_StepSearchLowerBound);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 4, move up (reverse, search upper bound)\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepSearchLowerBound);
         }
         break;
 
-    case J1_StepSearchLowerBound:
-        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_DOWN, nullptr, nullptr, QString()))
+    case J1StepSearchLowerBound:
+        if (J1MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_DOWN, nullptr, nullptr, QString()))
         {
-            J1_SetStep(ctx, J1_StepSearchUpperBound);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 5, upper bound reached, move down (search lower bound)\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepSearchUpperBound);
         }
         break;
 
-    case J1_StepSearchUpperBound:
-        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_UP, nullptr, nullptr, QString()))
+    case J1StepSearchUpperBound:
+        if (J1MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_MOVE_UP, nullptr, nullptr, QString()))
         {
-            J1_SetStep(ctx, J1_StepLeaveCalibration);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 6, lower bound reached, move up (search upper bound)\n", (unsigned long long)extAddr);
+            J1SetStep(ctx, J1StepLeaveCalibration);
         }
         break;
 
-    case J1_StepLeaveCalibration:
-        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) &&
-            J1_SendZcl(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, leaveCalibration))
+    case J1StepLeaveCalibration:
+        if (J1MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) &&
+            J1SendZclCommandWrapper(r, item, apsCtrl, writeParameters, UBISYS_J1_CMD_WRITE_ATTRIBUTES, UBISYS_J1_FC_WRITE, nullptr, leaveCalibration))
         {
-            J1_SetStep(ctx, J1_StepDone);
+            DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step 7, upper bound reached, write Mode = 0x00 (leave calibration mode), verify WindowCoveringType = %u\n", (unsigned long long)extAddr, ctx->coveringType);
+            J1SetStep(ctx, J1StepDone);
             return true;
         }
         break;
 
     default:
-        J1_StartContext(ctx, extAddr);
+        DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: unknown step %u, restart calibration\n", (unsigned long long)extAddr, ctx->step);
+        J1StartContext(ctx, extAddr);
         break;
     }
 
