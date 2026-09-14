@@ -1310,9 +1310,6 @@ public Q_SLOTS:
     void foundGateway(const QHostAddress &host, quint16 port, const QString &uuid, const QString &name);
 #endif // USE_GATEWAY_API
 
-    // window covering
-    void calibrateWindowCoveringNextStep();
-
     // thermostat
     void addTaskThermostatGetScheduleTimer();
 
@@ -1417,7 +1414,6 @@ public:
     bool addTaskRemoveScene(TaskItem &task, uint16_t groupId, uint8_t sceneId);
     bool addTaskWindowCovering(TaskItem &task, uint8_t cmdId, uint16_t pos, uint8_t pct);
     bool addTaskWindowCoveringSetAttr(TaskItem &task, uint16_t mfrCode, uint16_t attrId, uint8_t attrType, uint16_t attrValue);
-    bool addTaskWindowCoveringCalibrate(TaskItem &task, int WindowCoveringType);
     bool addTaskThermostatCmd(TaskItem &task, uint16_t mfrCode, uint8_t cmd, int16_t setpoint, uint8_t daysToReturn);
     bool addTaskThermostatGetSchedule(TaskItem &task);
     bool addTaskThermostatSetWeeklySchedule(TaskItem &task, quint8 weekdays, const QString &transitions);
@@ -1750,9 +1746,6 @@ public:
     QTimer *scheduleTimer;
     std::vector<Schedule> schedules;
     TaskItem taskScheduleTimer;
-
-    // window covering
-    TaskItem calibrationTask;
 
     // webhooks
     QNetworkAccessManager *webhookManager = nullptr;

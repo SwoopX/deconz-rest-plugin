@@ -191,6 +191,7 @@ extern const char *RStateMusicSync;
 extern const char *RStateOn;
 extern const char *RStateOpen;
 extern const char *RStateOpenBis;
+extern const char *RStateOperationalStatus;
 extern const char *RStateOrientationX;
 extern const char *RStateOrientationY;
 extern const char *RStateOrientationZ;

@@ -1,0 +1,8 @@
+{
+  "schema": "resourceitem1.schema.json",
+  "id": "state/operationalstatus",
+  "datatype": "UInt8",
+  "access": "R",
+  "public": false,
+  "description": "Window covering OperationalStatus (0x0102/0x000A), non-zero while the motor is running."
+}

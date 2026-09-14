@@ -201,13 +201,48 @@
           "name": "config/reachable"
         },
         {
-          "name": "config/windowcoveringtype"
+          "name": "config/windowcoveringtype",
+          "read": {
+            "at": "0x0000",
+            "cl": "0x0102",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x0000",
+            "cl": "0x0102",
+            "ep": 1,
+            "eval": "Item.val = Attr.val",
+            "fn": "zcl:attr"
+          },
+          "write": {
+            "fn": "ubisys:j1calibrate",
+            "ep": 1,
+            "state.timeout": 5,
+            "change.timeout": 600
+          }
         },
         {
           "name": "state/buttonevent"
         },
         {
           "name": "state/lastupdated"
+        },
+        {
+          "name": "state/operationalstatus",
+          "read": {
+            "at": "0x000A",
+            "cl": "0x0102",
+            "ep": 1,
+            "fn": "zcl:attr"
+          },
+          "parse": {
+            "at": "0x000A",
+            "cl": "0x0102",
+            "ep": 1,
+            "eval": "Item.val = Attr.val",
+            "fn": "zcl:attr"
+          }
         }
       ]
     },

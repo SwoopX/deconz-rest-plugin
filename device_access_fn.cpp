@@ -1977,6 +1977,479 @@ bool writeZclCommand(const Resource *r, const ResourceItem *item, deCONZ::ApsCon
     return result.isEnqueued;
 }
 
+/*
+    ubisys J1 / J1-R window covering calibration
+
+    http://www.ubisys.de/downloads/ubisys-j1-technical-reference.pdf
+    page 18, chapter 7.2.5.1. Calibration
+
+    Step 1
+       In order to calibrate the device, first choose the appropriate device type.
+       0 = Roller Shade Lift only, ..., 6 = Shutter Tilt only, ..., 8 Tilt Blind Lift & Tilt
+       Write attribute 0x10F2:0x0000 ("WindowCoveringType") accordingly.
+    Step 2
+       Prepare calibration by setting these values:
+       Write attribute 0x10F2:0x0010 ("InstalledOpenLimitLift") as 0x0000 = 0cm.
+       Write attribute 0x10F2:0x0011 ("InstalledClosedLimitLift") as 0x00F0 = 240cm.
+       Write attribute 0x10F2:0x0012 ("InstalledOpenLimitTilt") as 0x0000 = 0°.
+       Write attribute 0x10F2:0x0013 ("InstalledClosedLimitTilt") as 0x0384 = 90.0°.
+       Write attribute 0x10F2:0x1001 ("LiftToTiltTransitionSteps") as 0xFFFF = invalid.
+       Write attribute 0x10F2:0x1002 ("TotalSteps") as 0xFFFF = invalid.
+       Write attribute 0x10F2:0x1003 ("LiftToTiltTransitionSteps2") as 0xFFFF = invalid.
+       Write attribute 0x10F2:0x1004 ("TotalSteps2") as 0xFFFF = invalid
+    Step 3
+       Enter calibration mode:
+       Write attribute 0x0017 ("Mode") as 0x02.
+    Step 4
+       Send the "move down" command and "stop" after a few centimeters.
+    Step 5
+       Send the "move up" command. When the device reaches its top position,
+       J1 will recognize the upper bound.
+    Step 6
+       After J1 has reached the top position and the motor has stopped, send the "move down" command.
+    Step 7
+       After J1 has reached the lower bound and the motor has stopped, send the "move up" command.
+       J1 will search for the upper bound. Once the top position is reached,
+       calibration of the total steps in both directions is complete.
+    Step 8
+       In case of a tilt blind set attribute 0x10F2:0x1001 and 0x10F2:0x1003 to the time it takes for a lift-to tilt
+       transition (down) or a tilt-to-lift transition (up), respectively. Otherwise proceed with the next step.
+    Step 9
+       To leave calibration mode, clear bit #1 in the Mode attribute, e.g. write attribute 0x0017 as 0x00.
+
+    Implementation notes
+
+    - Step 1 and 2 are sent as one manufacturer specific write attributes command (J1_StepPrepare).
+    - Step 4 sends no "stop", "move up" 2 seconds after "move down" reverses the motor (as the legacy code did).
+    - Step 8 (tilt transition steps) is not handled, these can be set via config/ubisys_j1_lifttotilttransitionsteps(2).
+    - Motor stop is detected via the state/operationalstatus item which must be on the same sub-device
+      as config/windowcoveringtype, so that its attribute reports tick the StateChange.
+ */
+#define UBISYS_J1_MFR_CODE                0x10F2
+#define UBISYS_J1_CLUSTER_ID              0x0102 // Window Covering
+#define UBISYS_J1_ATTRID_TYPE             0x0000
+#define UBISYS_J1_ATTRID_MODE             0x0017
+#define UBISYS_J1_CMD_MOVE_UP             0x00
+#define UBISYS_J1_CMD_MOVE_DOWN           0x01
+#define UBISYS_J1_MODE_CALIBRATION        0x02
+#define UBISYS_J1_TABLE_SIZE              4
+#define UBISYS_J1_CTX_STALE_MS            (15 * 60 * 1000) // well above the DDF change.timeout
+#define UBISYS_J1_MOTOR_MIN_MS            4000             // time for the motor to start and report
+#define UBISYS_J1_NO_REPORT_FALLBACK_MS   30000            // legacy timing if no OperationalStatus report arrives
+#define UBISYS_J1_DEFAULT_CHANGE_TIMEOUT  180              // seconds, StateChange default
+
+enum J1_CalibrationStep : uint8_t
+{
+    J1_StepCleanup = 0,          //! Mode = 0x00, clears calibration mode of an aborted run
+    J1_StepPrepare = 1,          //! type + limits (manufacturer specific)
+    J1_StepEnterCalibration = 2, //! Mode = 0x02
+    J1_StepMoveDown = 3,         //! move down a bit
+    J1_StepMoveUp = 4,           //! reverse, search upper bound
+    J1_StepSearchLowerBound = 5, //! motor stopped at top, move down
+    J1_StepSearchUpperBound = 6, //! motor stopped at bottom, move up
+    J1_StepLeaveCalibration = 7, //! motor stopped at top, Mode = 0x00
+    J1_StepDone = 8              //! waits until the StateChange has verified or timed out
+};
+
+struct J1_Target
+{
+    uint64_t extAddr = 0;
+    uint16_t nwkAddr = 0;
+    uint8_t endpoint = 0; //! window covering server endpoint
+    bool valid = false;
+};
+
+struct J1_Attr
+{
+    uint16_t id;
+    uint8_t dataType; //! deCONZ::Zcl8BitEnum, Zcl8BitBitMap, Zcl8BitUint, Zcl16BitUint
+    uint16_t value;
+};
+
+struct UbisysJ1CalibrationCtx
+{
+    uint64_t extAddr = 0; //! 0 = free entry
+    uint8_t step = J1_StepCleanup;
+    uint8_t coveringType = 0;
+    deCONZ::SteadyTimeRef stepStart; //! for elapsed time checks
+    QDateTime stepStartWall; //! compared with ResourceItem::lastSet()
+};
+
+static std::array<UbisysJ1CalibrationCtx, UBISYS_J1_TABLE_SIZE> _DA_J1CalibrationTable;
+
+/*! Resolves addresses and the window covering endpoint for a calibration request.
+
+    \p r is the switch sub-device (endpoint 0x02) while the window covering server cluster
+    is on endpoint 0x01, therefore the endpoint is taken from the "ep" write parameter.
+ */
+static J1_Target J1_ResolveTarget(const Resource *r, const QVariant &writeParameters)
+{
+    J1_Target result;
+
+    const auto rParent = r->parentResource() ? r->parentResource() : r;
+    const auto *extAddr = rParent->item(RAttrExtAddress);
+    const auto *nwkAddr = rParent->item(RAttrNwkAddress);
+
+    if (!extAddr || !nwkAddr)
+    {
+        return result;
+    }
+
+    result.extAddr = extAddr->toNumber();
+    result.nwkAddr = nwkAddr->toNumber();
+    result.endpoint = 0x01;
+
+    const auto map = writeParameters.toMap();
+
+    if (map.contains(QLatin1String("ep")))
+    {
+        bool ok = false;
+        const auto ep = variantToUint(map.value(QLatin1String("ep")), UINT8_MAX, &ok);
+
+        if (ok && ep != AutoEndpoint && ep != BroadcastEndpoint)
+        {
+            result.endpoint = ep;
+        }
+    }
+
+    result.valid = true;
+    return result;
+}
+
+/*! Moves \p ctx to \p step and restarts the step timers. */
+static void J1_SetStep(UbisysJ1CalibrationCtx *ctx, uint8_t step)
+{
+    DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: step %u --> %u\n", (unsigned long long)ctx->extAddr, ctx->step, step);
+
+    ctx->step = step;
+    ctx->stepStart = deCONZ::steadyTimeRef();
+    ctx->stepStartWall = QDateTime::currentDateTime();
+}
+
+/*! Starts a new calibration run in \p ctx for \p extAddr. */
+static void J1_StartContext(UbisysJ1CalibrationCtx *ctx, uint64_t extAddr)
+{
+    *ctx = {};
+    ctx->extAddr = extAddr;
+    J1_SetStep(ctx, J1_StepCleanup);
+}
+
+/*! Returns the calibration context of \p extAddr, a new one is started if none exists.
+
+    Entries which didn't progress for UBISYS_J1_CTX_STALE_MS belong to a failed StateChange
+    and are restarted or reused.
+
+    \returns nullptr if the table is full.
+ */
+static UbisysJ1CalibrationCtx *J1_GetContext(uint64_t extAddr)
+{
+    const auto now = deCONZ::steadyTimeRef();
+    UbisysJ1CalibrationCtx *freeCtx = nullptr;
+
+    for (auto &ctx : _DA_J1CalibrationTable)
+    {
+        const bool stale = ctx.extAddr != 0 && (now - ctx.stepStart).val > UBISYS_J1_CTX_STALE_MS;
+
+        if (ctx.extAddr == extAddr)
+        {
+            if (stale)
+            {
+                J1_StartContext(&ctx, extAddr);
+            }
+            return &ctx;
+        }
+
+        if (!freeCtx && (ctx.extAddr == 0 || stale))
+        {
+            freeCtx = &ctx;
+        }
+    }
+
+    if (!freeCtx)
+    {
+        DBG_Printf(DBG_ERROR, "ubisys J1 calibration 0x%016llX: too many calibrations in progress\n", (unsigned long long)extAddr);
+        return nullptr;
+    }
+
+    J1_StartContext(freeCtx, extAddr);
+    return freeCtx;
+}
+
+/*! Sends one write attributes command containing \p count attributes.
+
+    ZCL_WriteAttribute() only supports one attribute per frame, the J1 preparation step writes nine.
+
+    \param mfrCode - manufacturer code, 0 for a standard frame
+    \returns true if the request was enqueued.
+ */
+static bool J1_WriteAttributes(const J1_Target &t, uint16_t mfrCode, const J1_Attr *attrs, size_t count, deCONZ::ApsController *apsCtrl)
+{
+    deCONZ::ApsDataRequest req;
+    deCONZ::ZclFrame zclFrame;
+
+    req.setDstEndpoint(t.endpoint);
+    req.setTxOptions(deCONZ::ApsTxAcknowledgedTransmission);
+    req.setDstAddressMode(deCONZ::ApsNwkAddress);
+    req.dstAddress().setNwk(t.nwkAddr);
+    req.dstAddress().setExt(t.extAddr);
+    req.setClusterId(UBISYS_J1_CLUSTER_ID);
+    req.setProfileId(HA_PROFILE_ID);
+    req.setSrcEndpoint(1); // TODO
+
+    zclFrame.setSequenceNumber(zclNextSequenceNumber());
+    zclFrame.setCommandId(deCONZ::ZclWriteAttributesId);
+
+    if (mfrCode != 0)
+    {
+        zclFrame.setFrameControl(deCONZ::ZclFCProfileCommand |
+                                 deCONZ::ZclFCManufacturerSpecific |
+                                 deCONZ::ZclFCDirectionClientToServer |
+                                 deCONZ::ZclFCDisableDefaultResponse);
+        zclFrame.setManufacturerCode(mfrCode);
+    }
+    else
+    {
+        zclFrame.setFrameControl(deCONZ::ZclFCProfileCommand |
+                                 deCONZ::ZclFCDirectionClientToServer |
+                                 deCONZ::ZclFCDisableDefaultResponse);
+    }
+
+    { // payload
+        QDataStream stream(&zclFrame.payload(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+
+        for (size_t i = 0; i < count; i++)
+        {
+            const J1_Attr &a = attrs[i];
+
+            stream << a.id;
+            stream << a.dataType;
+
+            if (a.dataType == deCONZ::Zcl8BitEnum || a.dataType == deCONZ::Zcl8BitBitMap || a.dataType == deCONZ::Zcl8BitUint)
+            {
+                stream << static_cast<quint8>(a.value);
+            }
+            else if (a.dataType == deCONZ::Zcl16BitUint)
+            {
+                stream << a.value;
+            }
+            else
+            {
+                DBG_Printf(DBG_ERROR, "ubisys J1 calibration: unsupported data type 0x%02X\n", a.dataType);
+                return false;
+            }
+        }
+    }
+
+    { // ZCL frame
+        QDataStream stream(&req.asdu(), QIODevice::WriteOnly);
+        stream.setByteOrder(QDataStream::LittleEndian);
+        zclFrame.writeToStream(stream);
+    }
+
+    return apsCtrl->apsdeDataRequest(req) == deCONZ::Success;
+}
+
+/*! Sends window covering "move up" (0x00) or "move down" (0x01) command.
+    \returns true if the request was enqueued.
+ */
+static bool J1_SendMoveCommand(const J1_Target &t, uint8_t commandId, deCONZ::ApsController *apsCtrl)
+{
+    ZCL_Param param{};
+    param.valid = 1;
+    param.hasCommandId = 1;
+    param.commandId = commandId;
+    param.clusterId = UBISYS_J1_CLUSTER_ID;
+    param.endpoint = t.endpoint;
+
+    std::vector<uint8_t> payload;
+    const auto zclResult = ZCL_SendCommand(param, t.extAddr, t.nwkAddr, apsCtrl, &payload);
+
+    return zclResult.isEnqueued;
+}
+
+/*! Checks if the motor has stopped after the command of the current step.
+
+    - At least \p minStepMs must have elapsed since the step started.
+    - A state/operationalstatus report received after the step started must be 0.
+    - While the last received value is non-zero, the motor is running (no timeout, the J1
+      only reports on change, a long travel doesn't produce intermediate reports).
+    - If no report was received at all, fall back to the legacy timing.
+ */
+static bool J1_MotorStopped(const Resource *r, const UbisysJ1CalibrationCtx &ctx, int64_t minStepMs)
+{
+    const auto elapsed = deCONZ::steadyTimeRef() - ctx.stepStart;
+
+    if (elapsed.val < minStepMs)
+    {
+        return false;
+    }
+
+    const ResourceItem *opStatus = r->item(RStateOperationalStatus);
+
+    if (opStatus && opStatus->lastSet().isValid() && opStatus->lastSet() > ctx.stepStartWall)
+    {
+        return opStatus->toNumber() == 0;
+    }
+
+    return elapsed.val >= UBISYS_J1_NO_REPORT_FALLBACK_MS;
+}
+
+/*! DDF write function to calibrate the ubisys J1 / J1-R for a new window covering type.
+
+    { "fn": "ubisys:j1calibrate", "ep": endpoint, "state.timeout": seconds, "change.timeout": seconds }
+
+    - endpoint: the window covering server endpoint (1)
+    - change.timeout: must cover the whole calibration, e.g. 600
+
+    The calibration takes several minutes and is driven by the StateChange of config/windowcoveringtype.
+    Each call performs at most one calibration step, per device progress is kept in _DA_J1CalibrationTable.
+
+    Contract: the function returns false while a calibration is in progress so that the StateChange stays in
+    StateCallFunction and calls it again on the next tick. It returns true only after the final
+    "leave calibration mode" command has been sent, then the StateChange verifies the window covering type.
+
+    Example: "write": {"fn": "ubisys:j1calibrate", "ep": 1, "state.timeout": 5, "change.timeout": 600}
+ */
+static bool writeUbisysJ1Calibration(const Resource *r, const ResourceItem *item, deCONZ::ApsController *apsCtrl, const QVariant &writeParameters)
+{
+    Q_ASSERT(r);
+    Q_ASSERT(item);
+    Q_ASSERT(apsCtrl);
+
+    const J1_Target t = J1_ResolveTarget(r, writeParameters);
+
+    if (!t.valid)
+    {
+        return false;
+    }
+
+    const auto type = item->toNumber(); // target value of the StateChange
+
+    if (type < 0 || type > UINT8_MAX)
+    {
+        return false;
+    }
+
+    UbisysJ1CalibrationCtx *ctx = J1_GetContext(t.extAddr);
+
+    if (!ctx)
+    {
+        return false;
+    }
+
+    if (ctx->step != J1_StepCleanup && ctx->coveringType != type)
+    {
+        DBG_Printf(DBG_DDF, "ubisys J1 calibration 0x%016llX: restart for type %u\n", (unsigned long long)t.extAddr, unsigned(type));
+        J1_StartContext(ctx, t.extAddr); // new request replaces running calibration
+    }
+
+    ctx->coveringType = static_cast<uint8_t>(type);
+
+    if (ctx->step == J1_StepDone)
+    {
+        // The StateChange called again, the window covering type couldn't be verified.
+        // Don't restart the motor sequence for the lifetime of that StateChange.
+        bool ok = false;
+        int changeTimeout = writeParameters.toMap().value(QLatin1String("change.timeout")).toInt(&ok);
+
+        if (!ok || changeTimeout <= 0)
+        {
+            changeTimeout = UBISYS_J1_DEFAULT_CHANGE_TIMEOUT;
+        }
+
+        if ((deCONZ::steadyTimeRef() - ctx->stepStart).val < int64_t(changeTimeout) * 1000)
+        {
+            return false;
+        }
+
+        J1_StartContext(ctx, t.extAddr);
+    }
+
+    const J1_Attr leaveCalibration = { UBISYS_J1_ATTRID_MODE, deCONZ::Zcl8BitBitMap, 0x00 };
+    const J1_Attr enterCalibration = { UBISYS_J1_ATTRID_MODE, deCONZ::Zcl8BitBitMap, UBISYS_J1_MODE_CALIBRATION };
+    const std::array<J1_Attr, 9> prepare =
+    {{
+        { UBISYS_J1_ATTRID_TYPE, deCONZ::Zcl8BitEnum, ctx->coveringType },
+        { 0x0010, deCONZ::Zcl16BitUint, 0x0000 }, // InstalledOpenLimitLift 0 cm
+        { 0x0011, deCONZ::Zcl16BitUint, 0x00F0 }, // InstalledClosedLimitLift 240 cm
+        { 0x0012, deCONZ::Zcl16BitUint, 0x0000 }, // InstalledOpenLimitTilt 0°
+        { 0x0013, deCONZ::Zcl16BitUint, 0x0384 }, // InstalledClosedLimitTilt 90.0°
+        { 0x1001, deCONZ::Zcl16BitUint, 0xFFFF }, // LiftToTiltTransitionSteps invalid
+        { 0x1002, deCONZ::Zcl16BitUint, 0xFFFF }, // TotalSteps invalid
+        { 0x1003, deCONZ::Zcl16BitUint, 0xFFFF }, // LiftToTiltTransitionSteps2 invalid
+        { 0x1004, deCONZ::Zcl16BitUint, 0xFFFF }  // TotalSteps2 invalid
+    }};
+
+    const auto elapsed = deCONZ::steadyTimeRef() - ctx->stepStart;
+
+    switch (ctx->step)
+    {
+    case J1_StepCleanup:
+        if (J1_WriteAttributes(t, 0, &leaveCalibration, 1, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepPrepare);
+        }
+        break;
+
+    case J1_StepPrepare:
+        if (J1_WriteAttributes(t, UBISYS_J1_MFR_CODE, prepare.data(), prepare.size(), apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepEnterCalibration);
+        }
+        break;
+
+    case J1_StepEnterCalibration:
+        if (J1_WriteAttributes(t, 0, &enterCalibration, 1, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepMoveDown);
+        }
+        break;
+
+    case J1_StepMoveDown:
+        if (elapsed.val >= 2000 && J1_SendMoveCommand(t, UBISYS_J1_CMD_MOVE_DOWN, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepMoveUp);
+        }
+        break;
+
+    case J1_StepMoveUp:
+        if (elapsed.val >= 2000 && J1_SendMoveCommand(t, UBISYS_J1_CMD_MOVE_UP, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepSearchLowerBound);
+        }
+        break;
+
+    case J1_StepSearchLowerBound:
+        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1_SendMoveCommand(t, UBISYS_J1_CMD_MOVE_DOWN, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepSearchUpperBound);
+        }
+        break;
+
+    case J1_StepSearchUpperBound:
+        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1_SendMoveCommand(t, UBISYS_J1_CMD_MOVE_UP, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepLeaveCalibration);
+        }
+        break;
+
+    case J1_StepLeaveCalibration:
+        if (J1_MotorStopped(r, *ctx, UBISYS_J1_MOTOR_MIN_MS) && J1_WriteAttributes(t, 0, &leaveCalibration, 1, apsCtrl))
+        {
+            J1_SetStep(ctx, J1_StepDone);
+            return true;
+        }
+        break;
+
+    default:
+        J1_StartContext(ctx, t.extAddr);
+        break;
+    }
+
+    return false;
+}
+
 ParseFunction_t DA_GetParseFunction(const QVariant &params)
 {
     ParseFunction_t result = nullptr;
@@ -2067,12 +2540,13 @@ WriteFunction_t DA_GetWriteFunction(const QVariant &params)
 {
     WriteFunction_t result = nullptr;
 
-    const std::array<WriteFunction, 4> functions =
+    const std::array<WriteFunction, 5> functions =
     {
         WriteFunction(QLatin1String("zcl"), 1, writeZclAttribute), // Deprecated
         WriteFunction(QLatin1String("zcl:attr"), 1, writeZclAttribute),
         WriteFunction(QLatin1String("zcl:cmd"), 1, writeZclCommand),
-        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData)
+        WriteFunction(QLatin1String("tuya"), 1, writeTuyaData),
+        WriteFunction(QLatin1String("ubisys:j1calibrate"), 1, writeUbisysJ1Calibration)
     };
 
     QString fnName;

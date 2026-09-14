@@ -1894,14 +1894,13 @@ int DeRestPluginPrivate::changeSensorConfig(const ApiRequest &req, ApiResponse &
                         updated = true;
                     }
                 }
-                if (rid.suffix == RConfigWindowCoveringType) // Unsigned integer
+                else if (rid.suffix == RConfigWindowCoveringType) // Unsigned integer
                 {
-                    if (sensor->modelId().startsWith(QLatin1String("J1")))
+                    if (devManaged && rsub && data.uinteger <= 9) // Managed by DDF, 0-9 see config_windowcoveringtype_item.json
                     {
-                        if (addTaskWindowCoveringCalibrate(task, data.uinteger))
-                        {
-                            updated = true;
-                        }
+                        change.addTargetValue(rid.suffix, data.uinteger);
+                        rsub->addStateChange(change);
+                        updated = true;
                     }
                 }
                 else if (rid.suffix == RConfigGroup) // String

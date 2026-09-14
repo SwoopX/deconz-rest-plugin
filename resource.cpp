@@ -153,6 +153,7 @@ const char *RStateMusicSync = "state/music_sync";
 const char *RStateOn = "state/on";
 const char *RStateOpen = "state/open";
 const char *RStateOpenBis = "state/open_bis";
+const char *RStateOperationalStatus = "state/operationalstatus";
 const char *RStateOrientationX = "state/orientation_x";
 const char *RStateOrientationY = "state/orientation_y";
 const char *RStateOrientationZ = "state/orientation_z";
@@ -481,6 +482,7 @@ void initResourceDescriptors()
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeBool, QVariant::Bool, RStateOn));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeBool, QVariant::Bool, RStateOpen));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeBool, QVariant::Bool, RStateOpenBis));
+    rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeUInt8, QVariant::Double, RStateOperationalStatus));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, QVariant::Double, RStateOrientationX));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, QVariant::Double, RStateOrientationY));
     rItemDescriptors.emplace_back(ResourceItemDescriptor(DataTypeInt16, QVariant::Double, RStateOrientationZ));
